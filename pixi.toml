@@ -1,0 +1,55 @@
+[workspace]
+name = "deus-ex-human-revolution-headtracking"
+version = "0.0.0"
+description = "Head tracking mod for Deus Ex: Human Revolution - Director's Cut using OpenTrack"
+license = "MIT"
+channels = ["conda-forge"]
+platforms = ["win-64"]
+
+[tasks]
+# Sync the cameraunlock-core submodule to its tracked branch.
+sync = "git submodule update --remote cameraunlock-core"
+
+# Configure CMake build (x86 / Win32 - DXHR Director's Cut is a 32-bit Crystal Engine game).
+# No -G: let CMake auto-detect the installed Visual Studio generator. Pinning
+# "Visual Studio 17 2022" broke on CI once the windows runner image moved to
+# VS 2026 (VS 17 absent); auto-detect picks whatever VS the machine has.
+setup = { cmd = """
+    powershell -Command "if (-not (Test-Path 'build')) { cmake -B build -A Win32 } else { Write-Host 'Build directory exists, skipping setup' -ForegroundColor Yellow }"
+""" }
+
+# Build debug configuration.
+build = { cmd = "cmake --build build --config Debug", depends-on = ["setup"] }
+
+# Build release configuration.
+build-release = { cmd = "cmake --build build --config Release", depends-on = ["setup"] }
+
+# Build + deploy release to the game directory.
+install = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1 Release", depends-on = ["build-release"] }
+
+# Remove the mod from the game directory.
+uninstall = "scripts\\uninstall.cmd"
+
+# Package release ZIPs (installer + nexus).
+package = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1", depends-on = ["build-release"] }
+
+# Build and run native unit tests (config-sanitization boundary logic, ADS pose).
+test = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/run-tests.ps1" }
+
+# Clean build artifacts.
+clean = { cmd = """
+    powershell -Command "foreach ($d in 'build','build-tests','bin') { if (Test-Path $d) { Remove-Item $d -Recurse -Force } }; Write-Host 'Build artifacts cleaned' -ForegroundColor Green"
+""" }
+
+# Automated release workflow (version bump, changelog, tag, push).
+release = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/release.ps1" }
+
+# Bump vendored Ultimate ASI Loader to the latest pinned upstream. Manual; commit the result.
+update-deps = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/update-deps.ps1" }
+
+# Zero the third-party DLLs Ultimate ASI Loader carries as resources out of the
+# vendored copy. update-deps runs this; package re-runs it in -VerifyOnly mode.
+strip-loader = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/strip-loader-payload.ps1 -Path vendor/ultimate-asi-loader/dinput8.dll" }
+
+[dependencies]
+# No pixi dependencies - using system CMake and Visual Studio 2022.

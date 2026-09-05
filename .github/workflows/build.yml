@@ -1,0 +1,108 @@
+name: Build
+
+on:
+  push:
+    branches: ['**']
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+
+jobs:
+  build:
+    name: Build and Validate
+    runs-on: windows-latest
+    if: ${{ !startsWith(github.event.head_commit.message, 'Release v') }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          submodules: true
+
+      - name: Setup Visual Studio environment
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3.0.0
+
+      # run-install: false - this workspace has zero conda dependencies (pixi is
+      # a task runner only; CMake and MSVC come from the runner image).
+      - name: Setup pixi
+        uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
+        with:
+          run-install: false
+
+      # Build, test and package through the SAME commands a developer runs
+      # locally. All build logic lives in the pixi task chain (setup -> build /
+      # build-release -> package); the workflow owns none, so local and CI
+      # can't drift.
+      - name: Build Debug
+        shell: pwsh
+        run: |
+          pixi run build
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::Debug build failed"
+            exit 1
+          }
+
+      - name: Build Release
+        shell: pwsh
+        run: |
+          pixi run build-release
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::Release build failed"
+            exit 1
+          }
+
+      - name: Verify build outputs
+        shell: pwsh
+        run: |
+          $required = @(
+            "bin/Release/DeusExHumanRevolutionHeadTracking.asi",
+            "bin/Debug/DeusExHumanRevolutionHeadTracking.asi"
+          )
+          $missing = $false
+          foreach ($f in $required) {
+            if (Test-Path $f) {
+              $kb = (Get-Item $f).Length / 1KB
+              Write-Host "  $f ($([math]::Round($kb, 2)) KB)" -ForegroundColor Green
+            } else {
+              Write-Host "  Missing: $f" -ForegroundColor Red
+              $missing = $true
+            }
+          }
+          if ($missing) {
+            Write-Host "::error::Some build outputs are missing"
+            exit 1
+          }
+
+      - name: Run unit tests
+        shell: pwsh
+        run: |
+          pixi run test
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::Unit tests failed"
+            exit 1
+          }
+
+      - name: Package installer
+        shell: pwsh
+        run: |
+          pixi run package
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::Packaging failed"
+            exit 1
+          }
+
+      - name: Verify installer was produced
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "release/*-installer.zip" | Select-Object -First 1
+          if (-not $installer) {
+            Write-Host "::error::No installer ZIP found to stage"
+            exit 1
+          }
