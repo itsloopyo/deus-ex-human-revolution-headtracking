@@ -98,7 +98,6 @@ Two equivalent binding sets - use whichever your keyboard has:
 | Toggle tracking     | `End`       | `Ctrl+Shift+Y`  |
 | Cycle tracking mode | `Page Up`   | `Ctrl+Shift+G`  |
 | Toggle yaw mode (world / local) | `Page Down` | `Ctrl+Shift+H` |
-| Cycle ADS mode      | `Insert`    | `Ctrl+Shift+U`  |
 
 `Page Up` / `Ctrl+Shift+G` cycles tracking mode:
 
@@ -107,26 +106,15 @@ Two equivalent binding sets - use whichever your keyboard has:
 3. Rotational tracking disabled, positional tracking enabled
 4. Back to normal
 
-`Insert` / `Ctrl+Shift+U` cycles what happens when you aim down sights. All
-three start the same way - raising the sights swings the view onto the point
-the reticle was marking, so your shot lands where you had it lined up - and
-they differ in what happens for the rest of the aim:
+### Aiming down sights
 
-1. **Tracking paused** (default) - the game keeps the camera for as long as the
-   sights are up. The sight picture is exactly the game's, and head movement
-   does nothing until you lower the weapon.
-2. **Tracking on, with an aim marker** - head tracking carries on from the
-   snapped position, and a small white crosshair is drawn wherever your rounds
-   will actually land. This white marker is authoritative, including with scoped
-   weapons. A scope's built-in reticle is only accurate while your eye is
-   exactly aligned with the optic, so the two reticles separate when head
-   tracking moves your view off that sight line.
-3. **Tracking on, no aim marker** - the same as 2 without the marker, for a
-   cleaner screen when you are happy reading the sights themselves.
+Head tracking stays on while you aim. The weapon stays where your mouse or
+controller points it, so with your head turned it sits off to one side with its
+sights still lined up, and your rounds land where those sights point. Head
+movement is scaled to the zoom, so a scope does not magnify it.
 
-The choice is saved to the INI, so it survives a restart. The mod draws no text
-of its own, so the mode you switched to is named in `HeadTracking.log` rather
-than on screen.
+Leaning eases out while the sights are up, because it would move your eye off
+them.
 
 ## Configuration
 
@@ -136,13 +124,7 @@ than on screen.
 [General]
 ; Yaw mode: true = horizon-locked yaw (default), false = camera-local
 WorldSpaceYaw=true
-; What head tracking does while the sights are up: paused, marker or tracked
-AdsMode=paused
 ```
-
-`AdsMode` is the setting `Insert` cycles, and pressing the key writes the new
-value back here. A value that is not one of the three names falls back to
-`paused`.
 
 Smoothing is chosen per connection from the tracker's source address:
 
@@ -186,10 +168,9 @@ file and let the next launch write a fresh one.
 - **Tracking is jittery:** raise `LocalSmoothing` (tracker on this PC) or `RemoteSmoothing` (tracker on your phone or another device) in the INI (0.0-1.0).
 - **View drifts:** centre it in your tracker app. The mod applies whatever pose the tracker sends, so the tracker owns the centre.
 - **Yaw feels wrong when looking up or down at extreme angles:** try toggling between world-locked and camera-local yaw with `Page Down` (or `Ctrl+Shift+H`). World-locked (default) is horizon-stable; camera-local follows the camera's current up-axis.
-- **Head tracking stops while aiming down sights:** that is `AdsMode=paused`, the default. Press `Insert` (or `Ctrl+Shift+U`) to cycle to a mode that keeps tracking through the aim.
+- **The weapon is off to one side when I aim down sights:** your head is turned: the weapon stays on your aim and you are looking past it. Turn back to it, or move your aim to where you are looking.
 - **A wall opens into a polygonal cutaway when you press into it:** the eye is inside the camera's near clip plane, where geometry stops being drawn. Raise `LeanCollisionSkin`. The mod already holds the eye clear of the plane it reads from the frame, so if this happens at the default, send the `lean-trace` line from `HeadTracking.log` - it names the near plane that frame was built with.
 - **Leaning still goes through walls:** search `HeadTracking.log` for `lean-trace`. A line saying the lean is running unclamped names what the mod could not read - until that clears the clamp cannot run, and the lean is applied whole. `LeanCollision=false` in the INI has the same effect deliberately.
-- **No white aim marker in the marker mode:** the marker is drawn by an overlay that attaches to the game's Direct3D 11 swap chain the first time you select the marker mode in gameplay. Check `HeadTracking.log` for `dx11_overlay: hooks enabled`; without that line the marker mode behaves like the no-marker one.
 
 ## Updating / Uninstalling
 

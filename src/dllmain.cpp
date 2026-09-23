@@ -58,11 +58,10 @@ unsigned __stdcall InitThread(void*) {
         LogUnmatchedBuildDiagnostic();
     }
 
-    // MinHook is process-wide and four hooks in this mod share it - the camera,
-    // the reticle, the sights, and the aim marker's overlay, which brings itself
-    // up from a frame long after this returns. So it is initialised here and
-    // torn down at detach, after all four, rather than owned by whichever hook
-    // happened to install first.
+    // MinHook is process-wide and three hooks in this mod share it - the camera,
+    // the reticle and the sights. So it is initialised here and torn down at
+    // detach, after all three, rather than owned by whichever hook happened to
+    // install first.
     if (profile != nullptr && MH_Initialize() != MH_OK) {
         Log::Line("ERROR: MH_Initialize failed");
         return 1;
@@ -79,7 +78,7 @@ unsigned __stdcall InitThread(void*) {
               cfg.local_smoothing, cfg.remote_smoothing,
               cfg.sens_yaw, cfg.sens_pitch, cfg.sens_roll);
 
-    if (!g_tracking.Start(cfg, iniPath)) {
+    if (!g_tracking.Start(cfg)) {
         Log::Line("ERROR: Tracking runtime start failed");
         return 1;
     }
@@ -87,8 +86,7 @@ unsigned __stdcall InitThread(void*) {
     if (!g_hotkeys.Start(cfg,
                         [] { g_tracking.ToggleEnabled(); },
                         [] { g_tracking.CycleTrackingMode(); },
-                        [] { g_tracking.ToggleYawMode(); },
-                        [] { g_tracking.CycleAdsMode(); })) {
+                        [] { g_tracking.ToggleYawMode(); })) {
         Log::Line("ERROR: Hotkeys start failed");
         g_tracking.Stop();
         return 1;
@@ -108,14 +106,13 @@ unsigned __stdcall InitThread(void*) {
         return 1;
     }
 
-    // Whether the sights are up. Everything downstream polls it, so it goes up
-    // before the reticle hook, which reads it to decide whether to draw the ADS
-    // marker.
+    // Whether the sights are up. The tracking runtime polls it every frame to
+    // ease the lean out while aiming.
     g_adsHook.Install(*profile);
 
     // The reticle only needs moving once aim is decoupled, so it follows the
     // camera hook and a failure there leaves the camera working.
-    g_reticleHook.Install(*profile, cfg, &g_tracking);
+    g_reticleHook.Install(*profile, cfg);
 
     Log::Line("DeusExHumanRevolutionHeadTracking ready");
     return 0;

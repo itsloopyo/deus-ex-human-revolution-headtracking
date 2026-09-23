@@ -1,7 +1,5 @@
 #include "reticle_hook.h"
 
-#include "ads.h"
-#include "aim_marker.h"
 #include "camera_hook.h"
 #include "logging.h"
 
@@ -88,7 +86,6 @@ float           s_stageWidth = 0.0f;
 float           s_stageHeight = 0.0f;
 float           s_unitsPerScreenX = 0.0f;   // stage units across the full width
 float           s_unitsPerScreenY = 0.0f;   // stage units down the full height
-TrackingRuntime* s_tracking = nullptr;
 bool            s_diag = false;
 bool            s_probe = false;
 bool            s_loggedProbe = false;
@@ -308,14 +305,10 @@ bool AimScreenOffset(const CameraView& view, float aimMetres,
     return std::isfinite(outX) && std::isfinite(outY);
 }
 
-// Places the reticle for this frame, and reports where. Returns whether the
-// screen position it wrote out is one the ADS marker may be drawn at; every path
-// that does not produce one returns false, so the marker is decided fresh on
-// every frame and can never be left standing where the rounds are not going.
-bool PlaceReticle(void* self, float& outNdcX, float& outNdcY) {
+void PlaceReticle(void* self) {
     void* movie = *reinterpret_cast<void**>(static_cast<uint8_t*>(self) + s_movieOffset);
     if (movie == nullptr || !ResolveStage(movie)) {
-        return false;
+        return;
     }
 
     // A correction the movie ignores and a correction that is never computed
@@ -338,12 +331,12 @@ bool PlaceReticle(void* self, float& outNdcX, float& outNdcY) {
                       "head. Set ReticleProbe=false to restore normal placement.",
                       0.4f * s_unitsPerScreenX);
         }
-        return false;
+        return;
     }
 
     const CameraView& view = CurrentCameraView();
     if (!view.valid) {
-        return false;
+        return;
     }
 
     // Live, on this frame, unsmoothed.
@@ -391,42 +384,18 @@ bool PlaceReticle(void* self, float& outNdcX, float& outNdcY) {
                   turnedDeg, view.tanFov,
                   offsetX, offsetY, stageX, stageY);
     }
-
-    // Screen fractions from the centre, in the marker's own convention: -1..1
-    // across the frame with y up, where the reticle's y runs down.
-    outNdcX = offsetX * 2.0f;
-    outNdcY = -offsetY * 2.0f;
-    return onScreen;
 }
 
 void __fastcall ReticleUpdateDetour(void* self, void* edx, float deltaTime) {
     s_originalUpdate(self, edx, deltaTime);
-
-    float ndcX = 0.0f;
-    float ndcY = 0.0f;
-    const bool placed = PlaceReticle(self, ndcX, ndcY);
-
-    // The overlay comes up on the MODE, not on the sights: selecting the marker
-    // mode is the player asking for a marker, and bringing it up then means it
-    // is ready before the first aim rather than during one. A player who never
-    // selects the mode never has their swap chain patched.
-    const bool ready =
-        s_tracking->GetAdsMode() == cameraunlock::ads::AdsMode::Marker && EnsureAimMarker();
-
-    // Whether it DRAWS is derived per frame and never latched: only with the
-    // sights up, and only for a projection that produced a position at all. A
-    // marker mode whose overlay never came up behaves exactly like
-    // AdsMode::Tracked.
-    PublishAimMarker(ready && placed && SightsAreUp(), ndcX, ndcY);
+    PlaceReticle(self);
 }
 
 }  // namespace
 
-bool ReticleHook::Install(const BuildProfile& profile, const Config& cfg,
-                          TrackingRuntime* tracking) {
+bool ReticleHook::Install(const BuildProfile& profile, const Config& cfg) {
     if (m_installed) return true;
 
-    s_tracking = tracking;
     s_movieOffset = profile.reticleMovieOffset;
     s_setVariableVfunc = profile.movieSetVariableVfunc;
     s_unitsPerMetre = profile.unitsPerMetre;

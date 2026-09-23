@@ -1,55 +1,44 @@
 #pragma once
 
-#include "cameraunlock/ads/ads_blend.h"
 #include "cameraunlock/ads/ads_fade.h"
-#include "cameraunlock/ads/ads_mode.h"
-#include "cameraunlock/ads/entry_pose.h"
 
 namespace DeusExHumanRevolutionHeadTracking {
 
-// What the head pose becomes while the sights are up: the transition, the
-// entry-relative pose and the blend between them, in one place.
+// Eases the lean out while the sights are up and back in when they come down.
 //
-// Separate from TrackingRuntime because everything here is decidable without a
-// socket, a camera or a game, and none of it is visible from a settings test.
-// The seam-crossing yaw, the capture that has to wait for a live rotation, and a
-// reversal that starts from where the transition actually is are all frames a
-// player either sees their head jump on or does not.
+// Raising the sights puts the weapon's sight line through the eye, and head
+// rotation turns the view about that same eye, so the sights stay lined up with
+// the head turned and rotation passes through untouched. A lean translates the
+// eye off that line, and this mod does not own a weapon pass it could draw from
+// the clean eye instead, so the lean is scaled by core's AdsFade: 150ms out,
+// 250ms back, a reversal continuing from where the transition is.
 //
-// This mod keeps feeding the camera through the aim rather than handing it back:
-// the camera hook writes whatever pose comes out of here every frame, so
-// AdsMode::Paused is a pose faded to nothing rather than a gate that shuts. That
-// is why nothing here has to hold a gate open for the length of the transition.
-class AdsPipeline {
+// Separate from TrackingRuntime because it is decidable without a socket, a
+// camera or a game, which is what lets the tests drive it frame by frame.
+class AdsLean {
 public:
-    using Pose = cameraunlock::ads::AdsEntryPose::Pose;
+    struct Pose {
+        float yaw = 0.0f, pitch = 0.0f, roll = 0.0f;
+        float x = 0.0f, y = 0.0f, z = 0.0f;
+    };
 
-    // `aiming` is the game's own sight state, polled - never this mod's own
-    // verdict about whether tracking applies. In Paused the fade is what takes
-    // the pose away, so feeding a verdict back in would make the fade restart
-    // itself several times a second for as long as the trigger is held.
-    //
-    // `live` says this frame's rotation is a real sample rather than the nothing
-    // a suppressed frame publishes, which is what stops the entry pose being
-    // captured from a stale interpolator.
-    Pose Apply(cameraunlock::ads::AdsMode mode, bool aiming, bool live,
-               const Pose& absolute, unsigned long long nowMs) {
-        const Pose relative = m_entry.Relative(aiming, live, absolute);
+    // `aiming` is the game's own sight state, polled this frame.
+    Pose Apply(bool aiming, const Pose& pose, unsigned long long nowMs) {
         const float scale = m_fade.Update(aiming, nowMs);
-        return cameraunlock::ads::BlendAdsPose(mode, scale, absolute, relative);
+        Pose out = pose;
+        out.x *= scale;
+        out.y *= scale;
+        out.z *= scale;
+        return out;
     }
 
     // Every reason tracking stands down - the master toggle, a stale tracker, no
-    // pose at all - so the next aim re-enters against the head where it actually
-    // is rather than against a pose from before the gap.
-    void Suppress() {
-        m_fade.Reset();
-        m_entry.Reset();
-    }
+    // pose at all - so the next frame starts from the hip rather than from a
+    // transition left over from before the gap.
+    void Suppress() { m_fade.Reset(); }
 
 private:
     cameraunlock::ads::AdsFade m_fade;
-    cameraunlock::ads::AdsEntryPose m_entry;
 };
 
 }  // namespace DeusExHumanRevolutionHeadTracking

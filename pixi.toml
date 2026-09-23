@@ -34,7 +34,7 @@ uninstall = "scripts\\uninstall.cmd"
 # Package release ZIPs (installer + nexus).
 package = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1", depends-on = ["build-release"] }
 
-# Build and run native unit tests (config-sanitization boundary logic, ADS pose).
+# Build and run native unit tests (config-sanitization boundary logic, ADS lean easing).
 test = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/run-tests.ps1" }
 
 # Clean build artifacts.

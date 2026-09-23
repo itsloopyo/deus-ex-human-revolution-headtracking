@@ -8,7 +8,6 @@
 #include "cameraunlock/tracking/head_tracking_session.h"
 
 #include <atomic>
-#include <string>
 
 namespace DeusExHumanRevolutionHeadTracking {
 
@@ -23,7 +22,7 @@ class TrackingRuntime {
 public:
     TrackingRuntime() : m_session(m_receiver) {}
 
-    bool Start(const Config& cfg, const std::string& iniPath);
+    bool Start(const Config& cfg);
     void Stop();
 
     // Called once per rendered frame from the camera hook. Advances the session
@@ -41,14 +40,6 @@ public:
 
     void ToggleYawMode();
     bool IsWorldSpaceYaw() const { return m_worldSpaceYaw.load(std::memory_order_relaxed); }
-
-    // Advances the ADS cycle and persists the choice. The per-frame walk reads
-    // the mode fresh every frame, so a change made mid-aim takes effect on that
-    // aim rather than on the next one.
-    void CycleAdsMode();
-    cameraunlock::ads::AdsMode GetAdsMode() const {
-        return m_adsMode.load(std::memory_order_relaxed);
-    }
 
 private:
     // Frame dt is clamped to this ceiling so a stall (alt-tab, load hitch) cannot
@@ -69,12 +60,10 @@ private:
 
     std::atomic<bool> m_enabled{false};
     std::atomic<bool> m_worldSpaceYaw{true};
-    std::atomic<cameraunlock::ads::AdsMode> m_adsMode{cameraunlock::ads::kDefaultAdsMode};
 
     // Touched only from the camera hook's frame, which is the one thread that
     // calls SamplePerFrame.
-    AdsPipeline m_ads;
-    std::string m_iniPath;
+    AdsLean m_adsLean;
 };
 
 }

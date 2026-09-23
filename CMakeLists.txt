@@ -36,7 +36,6 @@ set(MOD_SOURCES
     src/lean_trace.cpp
     src/reticle_hook.cpp
     src/ads.cpp
-    src/aim_marker.cpp
 )
 
 add_library(DeusExHumanRevolutionHeadTracking SHARED
@@ -68,7 +67,7 @@ if(WIN32)
 endif()
 
 # Opt-in native unit tests for the logic that is decidable without the game: the
-# config-sanitization boundary, and the ADS transition and entry pose.
+# config-sanitization boundary, and the lean easing while the sights are up.
 # OFF by default so the default build and the release packager never produce a
 # test binary in bin/. Enable with -DDXHR_BUILD_TESTS=ON.
 option(DXHR_BUILD_TESTS "Build DeusExHumanRevolutionHeadTracking unit tests" OFF)

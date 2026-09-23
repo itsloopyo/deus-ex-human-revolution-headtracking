@@ -5,8 +5,6 @@
 
 #include "cameraunlock/config/ini_reader.h"
 
-#include <windows.h>
-
 #include <cstdio>
 #include <fstream>
 
@@ -34,13 +32,11 @@ constexpr float kDefaultDeadzoneDeg     = 0.0f;
 constexpr bool  kDefaultPositionEnabled = true;
 constexpr bool  kDefaultLeanCollision   = true;
 constexpr float kDefaultLeanSkinM       = 0.19f;
-constexpr cameraunlock::ads::AdsMode kDefaultAdsMode = cameraunlock::ads::kDefaultAdsMode;
 constexpr bool  kDefaultCameraDump      = false;
 constexpr bool  kDefaultReticleProbe    = false;
 constexpr int   kDefaultVkToggle        = 0x23; // VK_END
 constexpr int   kDefaultVkPosition      = 0x21; // VK_PRIOR (Page Up)
 constexpr int   kDefaultVkYawMode       = 0x22; // VK_NEXT (Page Down)
-constexpr int   kDefaultVkAds           = 0x2D; // VK_INSERT
 constexpr bool  kDefaultChord           = true;
 
 bool FileExists(const char* path) {
@@ -68,11 +64,6 @@ void WriteDefaultIni(const char* path) {
     w.WriteComment(" camera's near clip plane is raised to clear it - closer than that the");
     w.WriteComment(" wall is not drawn at all and you see through it.");
     w.WriteDouble("LeanCollisionSkin", kDefaultLeanSkinM);
-    w.WriteComment(" What head tracking does while the sights are up. Cycled in game with Insert.");
-    w.WriteComment("   paused  - tracking stands down until the weapon comes down (default)");
-    w.WriteComment("   marker  - tracking stays live, and a white cross marks where rounds land");
-    w.WriteComment("   tracked - tracking stays live, nothing drawn");
-    w.WriteString("AdsMode", cameraunlock::ads::AdsModeValue(kDefaultAdsMode));
     w.WriteComment(" Discovery aid only: dump the camera matrix to the log instead of tracking.");
     w.WriteBool("CameraDump", kDefaultCameraDump);
     w.WriteComment(" Discovery aid only: sweep the reticle across the screen instead of");
@@ -97,16 +88,14 @@ void WriteDefaultIni(const char* path) {
     w.WriteDouble("DeadzoneDeg", kDefaultDeadzoneDeg);
     w.WriteBlankLine();
     w.WriteSection("Hotkeys");
-    w.WriteComment(" Virtual-key codes. Defaults: End (toggle), Page Up (cycle tracking mode), Page Down (yaw mode), Insert (ADS mode).");
+    w.WriteComment(" Virtual-key codes. Defaults: End (toggle), Page Up (cycle tracking mode), Page Down (yaw mode).");
     w.WriteHex("Toggle", kDefaultVkToggle);
     w.WriteHex("Position", kDefaultVkPosition);
     w.WriteHex("YawMode", kDefaultVkYawMode);
-    w.WriteHex("Ads", kDefaultVkAds);
-    w.WriteComment(" Chord alternatives: Ctrl+Shift+Y (toggle), Ctrl+Shift+G (cycle tracking mode), Ctrl+Shift+H (yaw mode), Ctrl+Shift+U (ADS mode).");
+    w.WriteComment(" Chord alternatives: Ctrl+Shift+Y (toggle), Ctrl+Shift+G (cycle tracking mode), Ctrl+Shift+H (yaw mode).");
     w.WriteBool("ChordToggle", kDefaultChord);
     w.WriteBool("ChordPosition", kDefaultChord);
     w.WriteBool("ChordYawMode", kDefaultChord);
-    w.WriteBool("ChordAds", kDefaultChord);
     w.Close();
 }
 
@@ -157,14 +146,6 @@ bool Config::LoadOrCreate(const char* iniPath) {
     world_space_yaw = ini.ReadBool("General", "WorldSpaceYaw", kDefaultWorldSpaceYaw);
     position_enabled = ini.ReadBool("General", "PositionEnabled", kDefaultPositionEnabled);
     lean_collision = ini.ReadBool("General", "LeanCollision", kDefaultLeanCollision);
-    // Anything that is not one of the three values lands on the default rather
-    // than on whichever branch happens to be last. That covers a typo in a
-    // hand-edited file, and it is also the migration path if a mode is ever
-    // renamed: the player gets stock ADS rather than head tracking through their
-    // sights that they never asked for.
-    ads_mode = cameraunlock::ads::ParseAdsMode(
-        ini.ReadString("General", "AdsMode",
-                       cameraunlock::ads::AdsModeValue(kDefaultAdsMode)).c_str());
     camera_dump = ini.ReadBool("General", "CameraDump", kDefaultCameraDump);
     reticle_probe = ini.ReadBool("General", "ReticleProbe", kDefaultReticleProbe);
 
@@ -204,22 +185,11 @@ bool Config::LoadOrCreate(const char* iniPath) {
     vk_toggle   = ini.ReadHex("Hotkeys", "Toggle",   kDefaultVkToggle);
     vk_position = ini.ReadHex("Hotkeys", "Position", kDefaultVkPosition);
     vk_yaw_mode = ini.ReadHex("Hotkeys", "YawMode",  kDefaultVkYawMode);
-    vk_ads      = ini.ReadHex("Hotkeys", "Ads",      kDefaultVkAds);
     chord_toggle   = ini.ReadBool("Hotkeys", "ChordToggle",   kDefaultChord);
     chord_position = ini.ReadBool("Hotkeys", "ChordPosition", kDefaultChord);
     chord_yaw_mode = ini.ReadBool("Hotkeys", "ChordYawMode",  kDefaultChord);
-    chord_ads      = ini.ReadBool("Hotkeys", "ChordAds",      kDefaultChord);
 
     return true;
-}
-
-bool SaveAdsMode(const char* iniPath, cameraunlock::ads::AdsMode mode) {
-    // Rewrites the one key in place, leaving the player's comments, spacing and
-    // every other setting exactly as they were. A full rewrite of the file would
-    // discard all three.
-    return WritePrivateProfileStringA("General", "AdsMode",
-                                      cameraunlock::ads::AdsModeValue(mode),
-                                      iniPath) != FALSE;
 }
 
 }

@@ -10,9 +10,8 @@
 
 namespace DeusExHumanRevolutionHeadTracking {
 
-bool TrackingRuntime::Start(const Config& cfg, const std::string& iniPath) {
+bool TrackingRuntime::Start(const Config& cfg) {
     m_cfg = cfg;
-    m_iniPath = iniPath;
 
     cameraunlock::SensitivitySettings sens;
     sens.yaw = m_cfg.sens_yaw;
@@ -52,8 +51,6 @@ bool TrackingRuntime::Start(const Config& cfg, const std::string& iniPath) {
 
     m_enabled.store(m_cfg.enabled_on_startup, std::memory_order_relaxed);
     m_worldSpaceYaw.store(m_cfg.world_space_yaw, std::memory_order_relaxed);
-    m_adsMode.store(m_cfg.ads_mode, std::memory_order_relaxed);
-    Log::Line("ADS mode: %s", cameraunlock::ads::AdsModeLabel(m_cfg.ads_mode));
     return true;
 }
 
@@ -81,24 +78,6 @@ void TrackingRuntime::CycleTrackingMode() {
     }
 }
 
-void TrackingRuntime::CycleAdsMode() {
-    const cameraunlock::ads::AdsMode next =
-        cameraunlock::ads::NextAdsMode(m_adsMode.load(std::memory_order_relaxed));
-    m_adsMode.store(next, std::memory_order_relaxed);
-
-    // The mod has no on-screen text of its own - the aim marker overlay draws
-    // primitives, not glyphs - so the log line is the toast. It carries the
-    // fleet's wording so a player reading it recognises the mode from any other
-    // shooter.
-    Log::Line("%s", cameraunlock::ads::AdsModeToast(next));
-
-    if (!SaveAdsMode(m_iniPath.c_str(), next)) {
-        Log::Line("WARN: could not write AdsMode back to %s. The mode applies now "
-                  "but will not survive a restart; check the file is writable.",
-                  m_iniPath.c_str());
-    }
-}
-
 void TrackingRuntime::ToggleYawMode() {
     bool prev = m_worldSpaceYaw.load(std::memory_order_relaxed);
     m_worldSpaceYaw.store(!prev, std::memory_order_relaxed);
@@ -120,32 +99,26 @@ bool TrackingRuntime::SamplePerFrame(HeadPose& out) {
 
     m_lastDt = m_clock.Tick();
 
-    // Every one of these is a real suppression, so the ADS transition and the
-    // entry pose are dropped rather than carried across the gap: coming back
-    // with the sights still up has to re-enter against the head where it now is.
     if (!m_enabled.load(std::memory_order_relaxed) ||
         !IsPoseFresh() ||
         !m_session.Update(m_lastDt)) {
-        m_ads.Suppress();
+        m_adsLean.Suppress();
         return false;
     }
 
-    AdsPipeline::Pose absolute{};
+    AdsLean::Pose absolute{};
     const bool rotationValid =
         m_session.GetRotation(absolute.yaw, absolute.pitch, absolute.roll);
     const bool positionValid = m_session.IsPositionActive() &&
                                m_session.GetPositionOffset(absolute.x, absolute.y, absolute.z);
     if (!rotationValid && !positionValid) {
-        m_ads.Suppress();
+        m_adsLean.Suppress();
         return false;
     }
 
-    // The sights come from the game's own state, polled on this frame. Never
-    // from the verdict above: in AdsMode::Paused the fade is what takes the pose
-    // away, so feeding our own answer back in would make it restart itself.
-    const AdsPipeline::Pose shaped =
-        m_ads.Apply(m_adsMode.load(std::memory_order_relaxed), SightsAreUp(),
-                    rotationValid, absolute, GetTickCount64());
+    // Asked last, after every gate above has had its say, so a frame tracking
+    // stands down on never reads the sights at all.
+    const AdsLean::Pose shaped = m_adsLean.Apply(SightsAreUp(), absolute, GetTickCount64());
 
     out.rotation_valid = rotationValid;
     out.yaw = shaped.yaw;

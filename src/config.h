@@ -2,7 +2,6 @@
 
 #include <cstdint>
 
-#include "cameraunlock/ads/ads_mode.h"
 #include "cameraunlock/math/smoothing_utils.h"
 
 namespace DeusExHumanRevolutionHeadTracking {
@@ -46,11 +45,6 @@ struct Config {
     // default already clears the near plane this game floors itself at.
     float lean_collision_skin_m = 0.19f;
 
-    // What head tracking does while the sights are up. Cycled in game with
-    // Insert; the chosen mode is written back to the INI so it survives a
-    // restart.
-    cameraunlock::ads::AdsMode ads_mode = cameraunlock::ads::kDefaultAdsMode;
-
     // Discovery aid: dump the baked camera matrix to the log instead of
     // injecting head rotation. Used while pinning the matrix layout.
     bool camera_dump = false;
@@ -62,19 +56,11 @@ struct Config {
     int vk_toggle    = 0x23; // VK_END
     int vk_position  = 0x21; // VK_PRIOR (Page Up) - cycle tracking mode
     int vk_yaw_mode  = 0x22; // VK_NEXT (Page Down)
-    int vk_ads       = 0x2D; // VK_INSERT - cycle ADS mode
     bool chord_toggle = true;
     bool chord_position = true;
     bool chord_yaw_mode = true;
-    bool chord_ads = true;
 
     bool LoadOrCreate(const char* iniPath);
 };
-
-// Writes the chosen ADS mode back to the INI. It is the player's choice, made
-// with a key rather than by editing a file, and a choice that does not survive
-// the next launch is a bug. Everything else in the INI is the player's to edit
-// and the mod never writes it.
-bool SaveAdsMode(const char* iniPath, cameraunlock::ads::AdsMode mode);
 
 }
