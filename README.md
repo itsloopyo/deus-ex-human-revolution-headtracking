@@ -8,6 +8,7 @@ An unofficial head tracking mod for Deus Ex: Human Revolution - Director's Cut t
 
 - **Decoupled look and aim** - head tracking moves the camera; aim stays on your mouse/controller
 - **6DOF positional tracking** - lean and peek with head position
+- **Works with any OpenTrack compatible tracker** - free options available for PC, iOS and Android
 
 ## Requirements
 
@@ -16,6 +17,13 @@ An unofficial head tracking mod for Deus Ex: Human Revolution - Director's Cut t
 - [OpenTrack](https://github.com/opentrack/opentrack) or a phone head-tracking app (e.g. HeadCam)
 
 ## Installation
+
+### Lopari
+
+Download [Lopari](https://lopari.app), choose **Deus Ex: Human Revolution - Director's Cut**, and click
+**Play with head tracking**.
+
+### Standalone Installer
 
 1. Download the latest `DeusExHumanRevolutionHeadTracking-vX.Y.Z-installer.zip` from [Releases](../../releases).
 2. Extract it anywhere.
