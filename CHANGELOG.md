@@ -16,21 +16,10 @@
   zoom. There is nothing to configure and the scaling is exactly 1.0 whenever
   the game is not zoomed.
 
-- Aim-down-sights handling, on `Insert` / `Ctrl+Shift+U`. Three modes, cycled
-  with the key and saved to the INI as `AdsMode`: tracking paused for the
-  duration of the aim (the default, and indistinguishable from an unmodded
-  game), tracking live with a white cross drawn wherever the rounds will land,
-  and tracking live with nothing drawn. All three ease onto the aim over 150ms
-  and back off over 250ms rather than switching, and the two tracked modes feed
-  poses measured from the frame the sights came up on, so raising the weapon
-  puts the view on the point the reticle was marking whatever angle your head
-  is holding. Head tilt is left alone throughout - it moves no aim point, and
-  levelling it would jolt the horizon twice per aim.
-- The white aim marker draws at the same screen position the reticle
-  compensation already computes, through an overlay on the game's Direct3D 11
-  swap chain. One projection, used twice, so the mark and the reticle cannot
-  disagree about where the shot goes. It is authoritative over a scope's own
-  reticle, which is only honest while the eye sits exactly on the optic.
+- Head tracking stays on while you aim down sights. Rotation carries straight
+  on, and the lean eases out over 150ms as the sights come up and back in over
+  250ms as they come down, since a lean moves the eye off the sight line.
+  There is no setting and no key for it.
 - Lean collision, on by default. The eye is held off walls, doors and cover
   instead of passing through them: before the lean is added to the camera the
   mod asks the game's own collision world what stands between the eye and where
