@@ -38,16 +38,16 @@
   the release is eased, so pressing into cover stops the view dead at the
   surface and coming off it does not pop. Nothing the game reads changes - the
   question is asked about the clean camera, so aim, projectiles and the
-  interaction pick are all untouched. Two INI keys under `[General]`:
-  `LeanCollision` to turn it off, and `LeanCollisionSkin` (metres, default
-  0.19) for how far off a surface to hold the eye. The standoff is held clear of
-  the camera's near clip plane, which the mod reads out of the frame's own
-  projection rather than assuming: this game floors that plane at 40 world
-  units (12.7cm), and a standoff inside it stops the eye short of the wall while
-  the wall itself is still too close to be drawn, so it opens into a polygonal
-  cutaway. A configured value below the plane is raised to clear it and the log
-  says so. An INI written by an earlier version does not carry the keys; add
-  them by hand or delete the file to have the defaults rewritten.
+  interaction pick are all untouched. `[Position] CollisionEnabled` turns it
+  off, and `[Position] CollisionMargin` (metres, default 0.19) is how far off a
+  surface to hold the eye. The standoff is held clear of the camera's near clip
+  plane, which the mod reads out of the frame's own projection rather than
+  assuming: this game floors that plane at 40 world units (12.7cm), and a
+  standoff inside it stops the eye short of the wall while the wall itself is
+  still too close to be drawn, so it opens into a polygonal cutaway. A
+  configured value below the plane is raised to clear it and the log says so.
+  An older file without these keys gets them, at their defaults, when the mod
+  converts it to the new layout.
 - 6DOF position tracking. Leaning moves the eye through the world, resolved
   against the camera's clean axes so a lean follows the body rather than the
   head-turned view, and scaled by the engine's own 316.05 units-per-metre
@@ -63,6 +63,7 @@
 - Comments, and keys the mod never read, are not carried over. Nor are these, where your old file had them:
   - A sensitivity, scale, deadzone, response curve or axis inversion you changed from its default. Set these in your tracker instead.
   - Reticle settings, and a key that toggled the reticle.
+  - The setting for a feature that earlier versions shipped switched off while it was untested. It now follows the mod's default.
 - Hotkeys are written as key names, and each hotkey lists every key that triggers it, the Ctrl+Shift chord included: `ToggleKey=End, Ctrl+Shift+Y`.
 - An older version of the mod may not read the new layout correctly. It reads a key that moved as its own default, and it can misread a hotkey or another value that is now written as a name. To go back to an older version, first copy `DeusExHumanRevolutionHeadTracking.ini.pre-canonical` back over `DeusExHumanRevolutionHeadTracking.ini`, which restores the old file.
 - Keys that moved or were renamed, each carried over with its value: `[General] Port` is `[Network] UdpPort`; `[General] PositionEnabled` is `[Position] PositionEnabled`, beside a new `[General] RotationEnabled`, and the two together are the tracking mode the game starts in; `[General] LeanCollision` is `[Position] CollisionEnabled`; `[General] LeanCollisionSkin` is `[Position] CollisionMargin`, still in metres; `[General] CameraDump` is `[Diagnostics] CameraDump`; `[Hotkeys] Toggle` and `ChordToggle` are `ToggleKey`, `Position` and `ChordPosition` are `CycleTrackingModeKey`, and `YawMode` and `ChordYawMode` are `YawModeKey`.
