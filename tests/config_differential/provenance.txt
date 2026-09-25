@@ -17,6 +17,9 @@ fc2146f8c585e5f610c7234e302f59de4945679cfa28ff479ca47477ec073f22  tests/config_d
 d7a905270933e3cb0c4c361d29d3fd701655498cbcd1875ea79d180468bdbe6a  tests/config_differential/oracle/core/include/cameraunlock/math/angle_utils.h  core bb4a0f6:cpp/include/cameraunlock/math/angle_utils.h
 43bdd2ef8554c78e5f440333463750c13b95110fe672b0b6e273244df9e7d169  tests/config_differential/oracle/core/include/cameraunlock/logging/file_log.h  core bb4a0f6:cpp/include/cameraunlock/logging/file_log.h
 73c53c2baa06bbfebe8211f62678aa2b60cb95f604743d3686951ba56b87ea47  tests/config_differential/oracle/core/src/logging/file_log.cpp  core bb4a0f6:cpp/src/logging/file_log.cpp
+147766d352eabdbfaad2b3396ba74c60e42bc7517cef4831548e4d0cc82930c5  tests/config_differential/oracle/src/hotkeys.cpp  dev:src/hotkeys.cpp
+090b4d4d5c9c996f5ae01b11ec039b17e618c95a5b3b524d0d2385283c53ec1b  tests/config_differential/oracle/src/hotkeys.h  dev:src/hotkeys.h
+de519d9b49c949353c550b9dda347380cbbf131f6768378f8a9f5fd97678fea8  tests/config_differential/oracle/core/include/cameraunlock/input/chord_hotkeys.h  core bb4a0f6:cpp/include/cameraunlock/input/chord_hotkeys.h
 #
 # The first-run output of the dev build, extracted once from the oracle.
 336fad691f6ee6d8e9812f58757e6951e7a634f519771a864b4a5aeb0f39f01d  tests/config_differential/data/dev-first-run.ini  dev first run
@@ -31,6 +34,11 @@ ace6e9f7deea6195d89357b6b08a51b4f93f5f462b15268ea608b5f3631da194  src/legacy_con
 # published build had.
 a7ffb44210ff59672fa97e8e5feaa2cb3e81938fcc0334a384c68bc371b3857a  cameraunlock-core/cpp/include/cameraunlock/config/ini_reader.h  core bb4a0f6:cpp/include/cameraunlock/config/ini_reader.h
 e01515c2656aaf533bae4350dc45b702c3e3d4043935743dcc9bd5ea581fbe1c  cameraunlock-core/cpp/src/config/ini_reader.cpp  core bb4a0f6:cpp/src/config/ini_reader.cpp
-# Also compiled into the import, not frozen in core and equal to bb4a0f6's at the
-# conversion: math/smoothing_utils.h and math/angle_utils.h, for the two smoothing
-# defaults core holds constant, and logging/file_log.{h,cpp}, which only logs.
+# Also compiled into the import and not frozen in core, so a pin bump that moves
+# one fails here: math/smoothing_utils.h and the angle_utils.h it includes, for
+# the two smoothing defaults, and logging/file_log.{h,cpp}, which only logs. Each
+# equals bb4a0f6's.
+fc2146f8c585e5f610c7234e302f59de4945679cfa28ff479ca47477ec073f22  cameraunlock-core/cpp/include/cameraunlock/math/smoothing_utils.h  core bb4a0f6:cpp/include/cameraunlock/math/smoothing_utils.h
+d7a905270933e3cb0c4c361d29d3fd701655498cbcd1875ea79d180468bdbe6a  cameraunlock-core/cpp/include/cameraunlock/math/angle_utils.h  core bb4a0f6:cpp/include/cameraunlock/math/angle_utils.h
+43bdd2ef8554c78e5f440333463750c13b95110fe672b0b6e273244df9e7d169  cameraunlock-core/cpp/include/cameraunlock/logging/file_log.h  core bb4a0f6:cpp/include/cameraunlock/logging/file_log.h
+73c53c2baa06bbfebe8211f62678aa2b60cb95f604743d3686951ba56b87ea47  cameraunlock-core/cpp/src/logging/file_log.cpp  core bb4a0f6:cpp/src/logging/file_log.cpp

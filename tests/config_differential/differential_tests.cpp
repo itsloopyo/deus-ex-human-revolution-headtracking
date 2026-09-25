@@ -7,12 +7,17 @@
 // Migration: the conversion, run by the config owner on a copy of the input.
 //
 // Comparison 1, oracle against import, on every input: load status, every
-// field both read (floats bit for bit), the startup state and the registered
-// hotkeys. The one difference it may find is kComparison1Differences below.
+// field both read (floats bit for bit), the startup state, and which actions
+// every key press fires under every set of held modifiers. The one difference
+// it may find is kComparison1Differences below.
 //
 // Comparison 2, import against migration, on every input: the same, where the
 // only differences allowed are the approved drops the import records, and the
 // deferral kUnrepresentable describes.
+//
+// The key presses go through the published build's own Hotkeys::Start and the
+// guards it compiled (OracleFires), and through the guard the current build
+// registers (CurrentFires).
 
 #include "config.h"
 #include "legacy_config/legacy_config.h"
@@ -21,16 +26,19 @@
 #include "cameraunlock/config/canonical_ini.h"
 #include "cameraunlock/config/config_owner.h"
 #include "cameraunlock/config/testing/ini_mutations.h"
+#include "cameraunlock/input/key_binding_registration.h"
 #include "cameraunlock/input/key_bindings.h"
 #include "cameraunlock/tracking/tracking_mode.h"
 
 #include <windows.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <optional>
 #include <sstream>
@@ -115,48 +123,111 @@ struct Input {
     std::optional<std::string> bytes;  // nullopt: no file
 };
 
-// A binding as the startup code registered it: a raw code, and whether it is
-// the Ctrl+Shift chord of that code's letter.
-struct Registered {
-    int vk;
-    bool chord;
-    bool operator==(const Registered& o) const { return vk == o.vk && chord == o.chord; }
-};
-
-// Startup state as the game's startup code derives it from the config.
-// dev:src/tracking_runtime.cpp Start and HEAD's: enabled from
-// enabled_on_startup, RotationAndPosition when position_enabled else
-// RotationOnly, the yaw mode from world_space_yaw.
-// dev:src/hotkeys.cpp Start and HEAD's: each action's code, then its chord
-// letter when the chord switch is on.
+// Startup state as dev:src/tracking_runtime.cpp Start derives it from the
+// config: enabled from enabled_on_startup, RotationAndPosition when
+// position_enabled else RotationOnly, the yaw mode from world_space_yaw.
 struct Startup {
     bool enabled;
     int mode;  // cameraunlock::TrackingMode: 0 rotation and position, 1 rotation only
     bool world_space_yaw;
-    std::vector<Registered> toggle, cycle, yaw;
 };
 
-std::vector<Registered> Actions(int vk, bool chord, char letter) {
-    std::vector<Registered> r{{vk, false}};
-    if (chord) r.push_back({letter, true});
-    return r;
-}
-
 Startup StartupOf(const dxhr_oracle_view::OracleConfig& c) {
-    return {c.enabled_on_startup, c.position_enabled ? 0 : 1, c.world_space_yaw,
-            Actions(c.vk_toggle, c.chord_toggle, 'Y'), Actions(c.vk_position, c.chord_position, 'G'),
-            Actions(c.vk_yaw_mode, c.chord_yaw_mode, 'H')};
+    return {c.enabled_on_startup, c.position_enabled ? 0 : 1, c.world_space_yaw};
 }
 
 Startup StartupOf(const legacy::Config& c) {
-    return {c.enabled_on_startup, c.position_enabled ? 0 : 1, c.world_space_yaw,
-            Actions(c.vk_toggle, c.chord_toggle, 'Y'), Actions(c.vk_position, c.chord_position, 'G'),
-            Actions(c.vk_yaw_mode, c.chord_yaw_mode, 'H')};
+    return {c.enabled_on_startup, c.position_enabled ? 0 : 1, c.world_space_yaw};
 }
 
 bool SameStartup(const Startup& a, const Startup& b) {
-    return a.enabled == b.enabled && a.mode == b.mode && a.world_space_yaw == b.world_space_yaw &&
-           a.toggle == b.toggle && a.cycle == b.cycle && a.yaw == b.yaw;
+    return a.enabled == b.enabled && a.mode == b.mode && a.world_space_yaw == b.world_space_yaw;
+}
+
+dxhr_oracle_view::HotkeyView KeysOf(const dxhr_oracle_view::OracleConfig& c) {
+    return {c.vk_toggle, c.vk_position, c.vk_yaw_mode, c.chord_toggle, c.chord_position, c.chord_yaw_mode};
+}
+
+dxhr_oracle_view::HotkeyView KeysOf(const legacy::Config& c) {
+    return {c.vk_toggle, c.vk_position, c.vk_yaw_mode, c.chord_toggle, c.chord_position, c.chord_yaw_mode};
+}
+
+cameraunlock::input::KeyModifiers g_currentHeld = cameraunlock::input::KeyModifiers::kNone;
+
+cameraunlock::input::KeyModifiers CurrentHeld() { return g_currentHeld; }
+
+cameraunlock::input::KeyModifiers ModifiersOf(int held) {
+    using cameraunlock::input::KeyModifiers;
+    KeyModifiers m = KeyModifiers::kNone;
+    if ((held & 1) != 0) m = m | KeyModifiers::kCtrl;
+    if ((held & 2) != 0) m = m | KeyModifiers::kShift;
+    if ((held & 4) != 0) m = m | KeyModifiers::kAlt;
+    return m;
+}
+
+// OracleFires' table for the current build. HEAD's Hotkeys::Start parses each
+// key list and hands it to RegisterKeyBindings, which puts one
+// detail::GuardKey callback per distinct key on the poller, holding that key's
+// bindings in list order. The same callbacks are built here with the held
+// modifiers read from the test rather than the keyboard, since the poller keeps
+// its callbacks to itself.
+dxhr_oracle_view::FireTable CurrentFires(const Config& m) {
+    using dxhr_oracle_view::kFirstKey;
+    using dxhr_oracle_view::kHeldStates;
+    using dxhr_oracle_view::kLastKey;
+    std::array<int, 3> fired{};
+    std::vector<std::pair<int, std::function<void()>>> registered;
+    const std::string* lists[3] = {&m.toggle_key_name, &m.cycle_tracking_mode_key_name, &m.yaw_mode_key_name};
+    for (int action = 0; action < 3; ++action) {
+        const cameraunlock::input::KeyBindingsParseResult parsed = cameraunlock::input::ParseKeyBindings(*lists[action]);
+        if (!parsed.ok()) throw std::logic_error("migrated hotkey list '" + *lists[action] + "' does not parse");
+        std::vector<int> keys;
+        std::vector<std::vector<cameraunlock::input::KeyModifiers>> modifiers;
+        for (const cameraunlock::input::KeyBinding& b : parsed.bindings) {
+            const auto at = std::find(keys.begin(), keys.end(), b.vk);
+            if (at == keys.end()) {
+                keys.push_back(b.vk);
+                modifiers.push_back({b.modifiers});
+            } else {
+                modifiers[static_cast<std::size_t>(at - keys.begin())].push_back(b.modifiers);
+            }
+        }
+        for (std::size_t i = 0; i < keys.size(); ++i) {
+            registered.emplace_back(keys[i], cameraunlock::input::detail::GuardKey(
+                                                 std::move(modifiers[i]), [&fired, action] { ++fired[action]; },
+                                                 &CurrentHeld));
+        }
+    }
+
+    dxhr_oracle_view::FireTable table;
+    table.reserve((kLastKey - kFirstKey + 1) * kHeldStates);
+    for (int vk = kFirstKey; vk <= kLastKey; ++vk) {
+        for (int held = 0; held < kHeldStates; ++held) {
+            fired = {};
+            g_currentHeld = ModifiersOf(held);
+            for (const auto& r : registered) {
+                if (r.first == vk) r.second();
+            }
+            table.push_back(fired);
+        }
+    }
+    g_currentHeld = cameraunlock::input::KeyModifiers::kNone;
+    return table;
+}
+
+// The first press whose fired actions differ, for the failure message.
+std::string FirstFireDifference(const dxhr_oracle_view::FireTable& expected, const dxhr_oracle_view::FireTable& got) {
+    for (std::size_t i = 0; i < expected.size() && i < got.size(); ++i) {
+        if (expected[i] != got[i]) {
+            char text[160];
+            std::snprintf(text, sizeof text, "key 0x%02X held %d fires %d/%d/%d, not %d/%d/%d",
+                          static_cast<int>(i / dxhr_oracle_view::kHeldStates) + dxhr_oracle_view::kFirstKey,
+                          static_cast<int>(i % dxhr_oracle_view::kHeldStates), got[i][0], got[i][1], got[i][2],
+                          expected[i][0], expected[i][1], expected[i][2]);
+            return text;
+        }
+    }
+    return expected.size() == got.size() ? "none" : "the tables differ in size";
 }
 
 // Every field the import reads, against the oracle's field of the same name.
@@ -311,6 +382,10 @@ ImportRun Comparison1(Scratch& scratch, const Input& input) {
         const std::vector<std::string> fields = FieldDifferences(oracle.config, import.config);
         Check(fields.empty(), input.name + ": fields differ: " + Join(fields));
         Check(SameStartup(StartupOf(oracle.config), StartupOf(import.config)), input.name + ": startup state differs");
+        const dxhr_oracle_view::FireTable oracleFires = dxhr_oracle_view::OracleFires(KeysOf(oracle.config));
+        const dxhr_oracle_view::FireTable importFires = dxhr_oracle_view::OracleFires(KeysOf(import.config));
+        Check(oracleFires == importFires,
+              input.name + ": hotkeys fire differently: " + FirstFireDifference(oracleFires, importFires));
     }
     return import;
 }
@@ -348,36 +423,14 @@ const DroppedValue* FindDrop(const std::vector<DroppedValue>& dropped, DropRule 
     return nullptr;
 }
 
-// What the startup code registers from a migrated key list.
-std::vector<Registered> Registrations(const std::string& list) {
-    const cameraunlock::input::KeyBindingsParseResult parsed = cameraunlock::input::ParseKeyBindings(list);
-    if (!parsed.ok()) throw std::logic_error("migrated hotkey list '" + list + "' does not parse");
-    std::vector<Registered> r;
-    for (const cameraunlock::input::KeyBinding& b : parsed.bindings) {
-        const bool chord = b.modifiers == (cameraunlock::input::KeyModifiers::kCtrl |
-                                           cameraunlock::input::KeyModifiers::kShift);
-        if (!chord && b.modifiers != cameraunlock::input::KeyModifiers::kNone) {
-            throw std::logic_error("migrated hotkey list '" + list + "' holds a modifier no legacy file could");
-        }
-        r.push_back({b.vk, chord});
-    }
-    return r;
-}
-
-// The import's registrations less what N1 unbinds: a nonzero code outside
-// 0x01-0xFE, which the import must have recorded as dropped. Code 0 never
-// fired and is not recorded.
-std::vector<Registered> ExpectedRegistrations(const std::vector<Registered>& legacy, const char* key,
-                                              const std::vector<DroppedValue>& dropped, const std::string& name) {
-    const int vk = legacy.front().vk;
+// N1 unbinds a nonzero code outside 0x01-0xFE, and the import must record it
+// as dropped. The fire tables cover 0x01-0xFE only, so this is the one check
+// that sees such a code. Code 0 never fired and is not recorded.
+void CheckOutOfRangeDrop(int vk, const char* key, const std::vector<DroppedValue>& dropped,
+                         const std::string& name) {
     const bool outOfRange = vk != 0 && (vk < 0x01 || vk > 0xFE);
     Check(outOfRange == (FindDrop(dropped, DropRule::KeyCodeOutOfRange, "Hotkeys", key) != nullptr),
           name + ": [Hotkeys] " + key + " dropped as out of range does not match its code");
-    std::vector<Registered> expected;
-    for (const Registered& r : legacy) {
-        if (r.chord || (r.vk >= 0x01 && r.vk <= 0xFE)) expected.push_back(r);
-    }
-    return expected;
 }
 
 void CheckPoseShaping(const ImportResult& imported, const char* section, const char* key, bool changed,
@@ -404,6 +457,7 @@ void Comparison2(Scratch& scratch, const Input& input, const ImportRun& import) 
     const fs::path copy = fs::path(file.wstring() + L".pre-canonical");
     ++g_statuses[static_cast<int>(loaded->status)];
 
+    bool deferred = false;
     if (!input.bytes) {
         Check(loaded->status == ConfigLoadStatus::Created, input.name + ": no file is not Created");
     } else if (import.result.status == legacy::ReadStatus::Refused) {
@@ -412,9 +466,13 @@ void Comparison2(Scratch& scratch, const Input& input, const ImportRun& import) 
         Check(!fs::exists(copy), input.name + ": a refused file got a copy");
         return;
     } else if (import.config.data_freshness_ms < 1) {
+        // The session runs on the Config the deferral hands back, so everything
+        // below up to the converted-file checks applies to it too.
         Check(loaded->status == ConfigLoadStatus::Deferred, input.name + ": " + kUnrepresentable + ", not deferred");
         Check(ReadBytes(file) == *input.bytes, input.name + ": a deferred file was changed");
-        return;
+        Check(!fs::exists(copy), input.name + ": a deferred file got a copy");
+        if (loaded->status != ConfigLoadStatus::Deferred) return;
+        deferred = true;
     } else {
         Check(loaded->status == ConfigLoadStatus::Migrated,
               input.name + ": not Migrated but " + cameraunlock::config::ConfigLoadStatusName(loaded->status));
@@ -467,16 +525,14 @@ void Comparison2(Scratch& scratch, const Input& input, const ImportRun& import) 
               input.name + ": unexpected drop " + cameraunlock::config::DescribeDroppedValue(drop));
     }
 
-    const Startup legacyStartup = StartupOf(l);
-    Check(Registrations(m.toggle_key_name) ==
-              ExpectedRegistrations(legacyStartup.toggle, "Toggle", imported.dropped, input.name),
-          input.name + ": toggle hotkeys differ");
-    Check(Registrations(m.cycle_tracking_mode_key_name) ==
-              ExpectedRegistrations(legacyStartup.cycle, "Position", imported.dropped, input.name),
-          input.name + ": cycle hotkeys differ");
-    Check(Registrations(m.yaw_mode_key_name) ==
-              ExpectedRegistrations(legacyStartup.yaw, "YawMode", imported.dropped, input.name),
-          input.name + ": yaw mode hotkeys differ");
+    CheckOutOfRangeDrop(l.vk_toggle, "Toggle", imported.dropped, input.name);
+    CheckOutOfRangeDrop(l.vk_position, "Position", imported.dropped, input.name);
+    CheckOutOfRangeDrop(l.vk_yaw_mode, "YawMode", imported.dropped, input.name);
+    const dxhr_oracle_view::FireTable before = dxhr_oracle_view::OracleFires(KeysOf(l));
+    const dxhr_oracle_view::FireTable after = CurrentFires(m);
+    Check(before == after, input.name + ": hotkeys fire differently: " + FirstFireDifference(before, after));
+
+    if (deferred) return;
 
     // The converted file: the reader and the table find nothing to report,
     // rendering what was read gives the same bytes, and the next launch

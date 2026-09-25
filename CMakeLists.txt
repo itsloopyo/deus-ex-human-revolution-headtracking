@@ -96,19 +96,22 @@ if(DXHR_BUILD_TESTS)
     add_test(NAME ads COMMAND dxhr_ads_tests)
 
     # The config differential test. The oracle is the newest published build's
-    # reader with the core sources it compiled, both copied verbatim into
-    # tests/config_differential/oracle; renaming its two namespaces lets it link
-    # beside the current core.
+    # reader and hotkey registration with the core sources they compiled, copied
+    # verbatim into tests/config_differential/oracle; renaming its two namespaces
+    # lets it link beside the current core. oracle_fake holds the one stand-in, a
+    # poller that records instead of polling.
     set(DXHR_ORACLE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests/config_differential/oracle)
     add_library(dxhr_config_oracle STATIC
         ${DXHR_ORACLE_DIR}/src/config.cpp
+        ${DXHR_ORACLE_DIR}/src/hotkeys.cpp
         ${DXHR_ORACLE_DIR}/core/src/config/ini_reader.cpp
         ${DXHR_ORACLE_DIR}/core/src/logging/file_log.cpp
         tests/config_differential/oracle_adapter.cpp
     )
     target_include_directories(dxhr_config_oracle PRIVATE
         ${DXHR_ORACLE_DIR}/src
-        ${DXHR_ORACLE_DIR}/core/include)
+        ${DXHR_ORACLE_DIR}/core/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/config_differential/oracle_fake)
     target_compile_definitions(dxhr_config_oracle PRIVATE
         cameraunlock=dxhr_oracle_core
         DeusExHumanRevolutionHeadTracking=dxhr_oracle)
