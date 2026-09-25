@@ -4,6 +4,12 @@
 
 An unofficial head tracking mod for Deus Ex: Human Revolution - Director's Cut that moves the view with your head while your mouse or controller keeps aiming, driven by a webcam, phone, or any OpenTrack compatible tracker, with no VR headset required.
 
+Updating from an earlier build? This version converts
+`DeusExHumanRevolutionHeadTracking.ini` to a new layout the first time it starts,
+keeps your old file beside it, and saves the tracking mode and yaw mode you pick
+in game. [Configuration](#configuration) lists what carries over and what does
+not.
+
 ## Features
 
 - **Decoupled look and aim** - head tracking moves the camera; aim stays on your mouse/controller
@@ -114,6 +120,14 @@ Two equivalent binding sets - use whichever your keyboard has:
 3. Rotational tracking disabled, positional tracking enabled
 4. Back to normal
 
+The tracking mode and the yaw mode are saved to the config file as you change
+them, and the game starts in them next time. `End` turns tracking on or off for
+the current session only; `EnableOnStartup` in the config file decides whether
+tracking is on when the game starts.
+
+Each action lists its keys in the `[Hotkeys]` section of the config file, the
+chord included, so you can rebind or remove either: `ToggleKey=End, Ctrl+Shift+Y`.
+
 ### Aiming down sights
 
 Head tracking stays on while you aim. The weapon stays where your mouse or
@@ -126,32 +140,97 @@ them.
 
 ## Configuration
 
-`DeusExHumanRevolutionHeadTracking.ini` is created next to `DXHRDC.exe` on first launch. Sensitivity, smoothing, deadzone, port, and hotkeys are all configurable there.
+<!-- cameraunlock:config -->
+The mod reads its settings from `DeusExHumanRevolutionHeadTracking.ini` in the game folder, and creates the file when it starts and finds none. Edit it with any text editor.
+
+Earlier versions of the mod used an older layout for this file. The first time this version starts, it converts the file once into the layout below and keeps the file as it was beside it as `DeusExHumanRevolutionHeadTracking.ini.pre-canonical`. `DeusExHumanRevolutionHeadTracking.ini.pre-canonical.last`, when present, is the file as it was before the most recent conversion: the mod converts the file again when it finds the older layout later, for example after an older version of the mod rewrote it.
+
+Comments, and keys the mod never read, are not carried over. Nor are these, where your old file had them:
+
+- Reticle settings, and a key that toggled the reticle.
+- A sensitivity, scale, deadzone, response curve or axis inversion you changed from its default. Set these in your tracker instead.
+- The setting for a feature that earlier versions shipped switched off while it was untested. It now follows the mod's default.
+
+An older version of the mod may not read the new layout correctly. It reads a key that moved as its own default, and it can misread a hotkey or another value that is now written as a name. To go back to an older version, first copy `DeusExHumanRevolutionHeadTracking.ini.pre-canonical` back over `DeusExHumanRevolutionHeadTracking.ini`, which restores the old file.
+
+With every setting at its default, the file reads:
 
 ```ini
+; Deus Ex: Human Revolution - Director's Cut head tracking settings.
+; Comments start with ; and go on their own line. Text after a value is part of the value.
+; Hotkeys are key names such as End, PageUp or Ctrl+Shift+Y. Separate several with commas; leave empty for none.
+
+[CameraUnlock]
+; Written by the mod. Leave this section in place.
+ConfigFormat=1
+
+[Network]
+; UDP port the mod receives tracker data on (OpenTrack protocol).
+UdpPort=4242
+
 [General]
-; Yaw mode: true = horizon-locked yaw (default), false = camera-local
+; true: head tracking is on when the game starts. ToggleKey turns it on and off.
+EnableOnStartup=true
+; true: yaw turns around the world's up axis. false: around the camera's own up axis.
 WorldSpaceYaw=true
+; true: turning your head turns the view.
+; Tracking mode at startup, with PositionEnabled. The mode hotkey changes both.
+RotationEnabled=true
+; Milliseconds a tracker packet stays current. Once the tracker has sent nothing
+; for this long, the mod stops following it until data arrives again.
+DataFreshnessMs=500
+
+[Smoothing]
+; Smoothing when the tracker runs on this PC. 0 is the least, 1 the most.
+LocalSmoothing=0.0
+; Smoothing when the tracker is another device on the network, such as a phone.
+; 0 is the least, 1 the most.
+RemoteSmoothing=0.15
+
+[Position]
+; true: moving your head moves the view.
+; Tracking mode at startup, with RotationEnabled. The mode hotkey changes both.
+PositionEnabled=true
+; true: leaning stops at walls instead of moving the view through them.
+CollisionEnabled=true
+; How far, in metres, the view is held off a wall when you lean into it.
+; A value inside the camera's near clip plane is raised to clear it.
+CollisionMargin=0.19
+
+[Hotkeys]
+; Turns head tracking on and off.
+ToggleKey=End, Ctrl+Shift+Y
+; Changes the tracking mode: rotation and position, rotation only, position only.
+CycleTrackingModeKey=PageUp, Ctrl+Shift+G
+; Switches yaw between the world's up axis and the camera's own (WorldSpaceYaw).
+YawModeKey=PageDown, Ctrl+Shift+H
+
+[Diagnostics]
+; true: write camera and reticle diagnostics to HeadTracking.log, for troubleshooting.
+CameraDump=false
 ```
+<!-- /cameraunlock:config -->
+
+### Smoothing
 
 Smoothing is chosen per connection from the tracker's source address:
+`LocalSmoothing` applies to a tracker running on this machine (loopback), and
+`RemoteSmoothing` to one on another device, such as a phone over WiFi. Both
+cover rotation and position. Switching between a local OpenTrack instance and a
+phone on WiFi picks up the other value without restarting the game.
 
-| `[Smoothing]` key | Default | Range | Applies to |
-|-------------------|---------|-------|------------|
-| `LocalSmoothing` | `0.0` | 0.0-1.0 | Tracker running on this machine (loopback). 0 = no smoothing, 1 = heavy |
-| `RemoteSmoothing` | `0.15` | 0.0-1.0 | Tracker on a remote network device, e.g. a phone over WiFi. 0 = no smoothing, 1 = heavy |
+### Yaw mode
 
-Both cover rotation and position. Switching between a local OpenTrack instance
-and a phone on WiFi picks up the other value without restarting the game.
+`WorldSpaceYaw=true` (default) keeps head yaw locked to the world's up-axis no
+matter where the camera is pitched; `false` yaws around the camera's own up-axis
+instead. Toggle it in game with `Page Down` / `Ctrl+Shift+H`.
 
-`WorldSpaceYaw=true` (default) keeps head yaw locked to the world's up-axis no matter where the camera is pitched; `false` yaws around the camera's own up-axis instead. Toggle at runtime with `Page Down` / `Ctrl+Shift+H`.
+### Lean collision
 
-Leaning is stopped by the level rather than passing through it:
-
-| `[General]` key | Default | What it does |
-|-----------------|---------|--------------|
-| `LeanCollision` | `true` | Asks the game's own collision what stands between the eye and where the tracker wants it, and shortens the lean to fit |
-| `LeanCollisionSkin` | `0.19` | How far off a blocking surface to hold the eye, in metres |
+Leaning is stopped by the level rather than passing through it. With
+`CollisionEnabled=true` the mod asks the game's own collision what stands between
+the eye and where the tracker wants it, and shortens the lean to fit.
+`CollisionMargin` is how far off a blocking surface to hold the eye, in metres.
 
 Only what you see is affected. The question is asked about the camera the game
 is aiming with, so where shots go and what an interaction prompt picks are the
@@ -166,24 +245,20 @@ sees straight through the wall - the cutaway the clamp exists to prevent. A
 smaller value is raised to clear the plane and `HeadTracking.log` names the
 number it used.
 
-An INI written by an earlier version does not have these two keys in it. The
-defaults above still apply; add the keys by hand to change them, or delete the
-file and let the next launch write a fresh one.
-
 ## Troubleshooting
 
 - **No head tracking in game:** check `HeadTracking.log` next to `DXHRDC.exe` exists after launching. If not, the ASI loader is not engaging - re-run `install.cmd`. The log is rewritten from scratch on every launch; the previous launch is kept as `HeadTracking.prev.log`, which is the one to send if the game crashed and you have relaunched since.
-- **Tracking is jittery:** raise `LocalSmoothing` (tracker on this PC) or `RemoteSmoothing` (tracker on your phone or another device) in the INI (0.0-1.0).
+- **Tracking is jittery:** raise `LocalSmoothing` (tracker on this PC) or `RemoteSmoothing` (tracker on your phone or another device) in the config file (0.0-1.0).
 - **View drifts:** centre it in your tracker app. The mod applies whatever pose the tracker sends, so the tracker owns the centre.
 - **Yaw feels wrong when looking up or down at extreme angles:** try toggling between world-locked and camera-local yaw with `Page Down` (or `Ctrl+Shift+H`). World-locked (default) is horizon-stable; camera-local follows the camera's current up-axis.
 - **The weapon is off to one side when I aim down sights:** your head is turned: the weapon stays on your aim and you are looking past it. Turn back to it, or move your aim to where you are looking.
-- **A wall opens into a polygonal cutaway when you press into it:** the eye is inside the camera's near clip plane, where geometry stops being drawn. Raise `LeanCollisionSkin`. The mod already holds the eye clear of the plane it reads from the frame, so if this happens at the default, send the `lean-trace` line from `HeadTracking.log` - it names the near plane that frame was built with.
-- **Leaning still goes through walls:** search `HeadTracking.log` for `lean-trace`. A line saying the lean is running unclamped names what the mod could not read - until that clears the clamp cannot run, and the lean is applied whole. `LeanCollision=false` in the INI has the same effect deliberately.
+- **A wall opens into a polygonal cutaway when you press into it:** the eye is inside the camera's near clip plane, where geometry stops being drawn. Raise `CollisionMargin`. The mod already holds the eye clear of the plane it reads from the frame, so if this happens at the default, send the `lean-trace` line from `HeadTracking.log` - it names the near plane that frame was built with.
+- **Leaning still goes through walls:** search `HeadTracking.log` for `lean-trace`. A line saying the lean is running unclamped names what the mod could not read - until that clears the clamp cannot run, and the lean is applied whole. `CollisionEnabled=false` in the config file has the same effect deliberately.
 
 ## Updating / Uninstalling
 
 - Update: run the new version's `install.cmd` - it redeploys in place.
-- Uninstall: run `uninstall.cmd`. It removes the mod and, if we installed it, the ASI loader.
+- Uninstall: run `uninstall.cmd`. It removes the mod and, if we installed it, the ASI loader. It leaves `DeusExHumanRevolutionHeadTracking.ini` in place, so a reinstall keeps your settings.
 
 ## Building from source
 

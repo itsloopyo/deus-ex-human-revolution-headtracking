@@ -8,12 +8,16 @@
 #include "reticle_hook.h"
 #include "tracking_runtime.h"
 
+#include "cameraunlock/config/config_owner.h"
 #include "cameraunlock/diagnostics/crash_handler.h"
+#include "cameraunlock/tracking/tracking_mode.h"
 
 #include "MinHook.h"
 
 #include <windows.h>
 #include <process.h>
+
+#include <optional>
 
 namespace {
 
@@ -28,6 +32,32 @@ DeusExHumanRevolutionHeadTracking::Hotkeys         g_hotkeys;
 DeusExHumanRevolutionHeadTracking::CameraHook      g_cameraHook;
 DeusExHumanRevolutionHeadTracking::ReticleHook     g_reticleHook;
 DeusExHumanRevolutionHeadTracking::AdsHook         g_adsHook;
+
+// The one reader and writer of the config file. The hotkey thread saves
+// through it after InitThread has loaded it.
+std::optional<cameraunlock::config::ConfigOwner<DeusExHumanRevolutionHeadTracking::Config>> g_configOwner;
+
+void LogSave(const cameraunlock::config::ConfigSaveResult& saved) {
+    using namespace DeusExHumanRevolutionHeadTracking;
+    if (saved.status == cameraunlock::config::ConfigSaveStatus::Saved) return;
+    for (const std::string& line : saved.log) Log::Line("%s", line.c_str());
+    Log::Line("WARN: %s", saved.reason.c_str());
+}
+
+void CycleTrackingModeAndSave() {
+    const cameraunlock::TrackingModeChannels channels =
+        cameraunlock::EncodeTrackingMode(g_tracking.CycleTrackingMode());
+    LogSave(g_configOwner->Save([channels](DeusExHumanRevolutionHeadTracking::Config& c) {
+        c.rotation_enabled = channels.rotation_enabled;
+        c.position_enabled = channels.position_enabled;
+    }));
+}
+
+void ToggleYawModeAndSave() {
+    const bool worldSpace = g_tracking.ToggleYawMode();
+    LogSave(g_configOwner->Save(
+        [worldSpace](DeusExHumanRevolutionHeadTracking::Config& c) { c.world_space_yaw = worldSpace; }));
+}
 
 unsigned __stdcall InitThread(void*) {
     using namespace DeusExHumanRevolutionHeadTracking;
@@ -67,16 +97,27 @@ unsigned __stdcall InitThread(void*) {
         return 1;
     }
 
-    Config cfg;
-    std::string iniPath = GetModulePath("DeusExHumanRevolutionHeadTracking.ini");
-    if (!cfg.LoadOrCreate(iniPath.c_str())) {
+    cameraunlock::config::ConfigOwnerOptions<Config> options;
+    options.path = GetModulePathW(kConfigFileName);
+    options.table = MakeConfigTable();
+    options.import = MakeLegacyImport();
+    options.header.display_name = kConfigDisplayName;
+    g_configOwner.emplace(std::move(options));
+
+    const cameraunlock::config::ConfigLoadResult<Config> loaded = g_configOwner->Load();
+    for (const std::string& line : loaded.log) Log::Line("%s", line.c_str());
+    Log::Line("Config: %s", cameraunlock::config::ConfigLoadStatusName(loaded.status));
+    if (!loaded.reason.empty()) Log::Line("WARN: %s", loaded.reason.c_str());
+    // The build this file was written for refused it and did not start, so
+    // this one does the same until the player fixes it.
+    if (loaded.status == cameraunlock::config::ConfigLoadStatus::LegacyRefused) {
         Log::Line("ERROR: Config load failed");
         return 1;
     }
-    Log::Line("Config: port=%u enabled=%d smoothing=(local %.2f, remote %.2f) sens=(%.2f,%.2f,%.2f)",
-              cfg.udp_port, cfg.enabled_on_startup ? 1 : 0,
-              cfg.local_smoothing, cfg.remote_smoothing,
-              cfg.sens_yaw, cfg.sens_pitch, cfg.sens_roll);
+    const Config& cfg = loaded.config;
+    Log::Line("Config: port=%d enabled=%d smoothing=(local %.2f, remote %.2f)",
+              cfg.udp_port, cfg.enable_on_startup ? 1 : 0,
+              cfg.local_smoothing, cfg.remote_smoothing);
 
     if (!g_tracking.Start(cfg)) {
         Log::Line("ERROR: Tracking runtime start failed");
@@ -85,8 +126,8 @@ unsigned __stdcall InitThread(void*) {
 
     if (!g_hotkeys.Start(cfg,
                         [] { g_tracking.ToggleEnabled(); },
-                        [] { g_tracking.CycleTrackingMode(); },
-                        [] { g_tracking.ToggleYawMode(); })) {
+                        [] { CycleTrackingModeAndSave(); },
+                        [] { ToggleYawModeAndSave(); })) {
         Log::Line("ERROR: Hotkeys start failed");
         g_tracking.Stop();
         return 1;

@@ -115,6 +115,7 @@ if(DXHR_BUILD_TESTS)
 
     add_executable(dxhr_config_differential_tests
         tests/config_differential/differential_tests.cpp
+        src/config.cpp
         src/legacy_config/legacy_config.cpp
     )
     target_include_directories(dxhr_config_differential_tests PRIVATE
@@ -129,4 +130,22 @@ if(DXHR_BUILD_TESTS)
         target_compile_options(dxhr_config_differential_tests PRIVATE /W4 /WX /permissive-)
     endif()
     add_test(NAME config_differential COMMAND dxhr_config_differential_tests)
+
+    # The committed config against the table, the fresh-equals-upgrade check and
+    # the owner's saves. `--render-config <path>` makes it write the committed
+    # file instead (pixi run render-config).
+    add_executable(dxhr_config_tests
+        tests/config_tests.cpp
+        src/config.cpp
+        src/legacy_config/legacy_config.cpp
+    )
+    target_include_directories(dxhr_config_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_compile_definitions(dxhr_config_tests PRIVATE DXHR_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
+    target_link_libraries(dxhr_config_tests PRIVATE cameraunlock)
+    set_target_properties(dxhr_config_tests PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests")
+    if(MSVC)
+        target_compile_options(dxhr_config_tests PRIVATE /W4 /WX /permissive-)
+    endif()
+    add_test(NAME config COMMAND dxhr_config_tests)
 endif()

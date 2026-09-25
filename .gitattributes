@@ -50,3 +50,6 @@
 # sources are compared byte for byte, so git must not touch their line endings.
 tests/config_differential/data/** -text
 tests/config_differential/oracle/** -text
+
+# The committed canonical config: CRLF, byte for byte what the mod creates.
+DeusExHumanRevolutionHeadTracking.ini -text

@@ -36,9 +36,9 @@ public:
     float LastFrameDt() const { return m_lastDt; }
 
     void ToggleEnabled();
-    void CycleTrackingMode();
-
-    void ToggleYawMode();
+    // Each returns the state it switched to.
+    cameraunlock::TrackingMode CycleTrackingMode();
+    bool ToggleYawMode();
     bool IsWorldSpaceYaw() const { return m_worldSpaceYaw.load(std::memory_order_relaxed); }
 
 private:

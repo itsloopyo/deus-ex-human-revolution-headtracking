@@ -507,7 +507,7 @@ float EffectiveSkinUnits() {
     static bool logged = false;
     if (!logged) {
         logged = true;
-        Log::Line("lean-clamp: LeanCollisionSkin=%.2fm is inside this camera's near "
+        Log::Line("lean-clamp: CollisionMargin=%.2fm is inside this camera's near "
                   "clip plane (%.0f units, %.3fm), where a held-off wall is still not "
                   "drawn. Holding the eye at %.3fm instead.",
                   s_leanSkinMetres, nearPlane, nearPlane / s_unitsPerMetre,
@@ -662,8 +662,8 @@ bool CameraHook::Install(const BuildProfile& profile, const Config& cfg, Trackin
     s_renderReads = profile.renderReadRvas;
     s_renderReadCount = profile.renderReadCount;
     s_unitsPerMetre = profile.unitsPerMetre;
-    s_leanCollision = cfg.lean_collision;
-    s_leanSkinMetres = cfg.lean_collision_skin_m;
+    s_leanCollision = cfg.collision_enabled;
+    s_leanSkinMetres = cfg.lean_clamp.skin;
     s_diag = cfg.camera_dump;
 
     HMODULE base = GetModuleHandleA(profile.module);  // null -> the EXE

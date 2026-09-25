@@ -38,6 +38,13 @@ package = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/package-rele
 # ADS lean easing, and the config differential test against the published build.
 test = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/run-tests.ps1" }
 
+# Build the test binaries without running them.
+build-tests = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/run-tests.ps1 -BuildOnly" }
+
+# Rewrite DeusExHumanRevolutionHeadTracking.ini, the committed config, from the
+# config table after a change to a row, a comment or a default.
+render-config = { cmd = "build-tests/tests/Debug/dxhr_config_tests.exe --render-config DeusExHumanRevolutionHeadTracking.ini && node cameraunlock-core/scripts/encode-seed.mjs", depends-on = ["build-tests"] }
+
 # Clean build artifacts.
 clean = { cmd = """
     powershell -Command "foreach ($d in 'build','build-tests','bin') { if (Test-Path $d) { Remove-Item $d -Recurse -Force } }; Write-Host 'Build artifacts cleaned' -ForegroundColor Green"

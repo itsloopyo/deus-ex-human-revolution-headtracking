@@ -87,8 +87,6 @@ float           s_stageHeight = 0.0f;
 float           s_unitsPerScreenX = 0.0f;   // stage units across the full width
 float           s_unitsPerScreenY = 0.0f;   // stage units down the full height
 bool            s_diag = false;
-bool            s_probe = false;
-bool            s_loggedProbe = false;
 
 int  s_diagWritten = 0;
 bool s_loggedFirst = false;
@@ -311,29 +309,6 @@ void PlaceReticle(void* self) {
         return;
     }
 
-    // A correction the movie ignores and a correction that is never computed
-    // put the reticle in exactly the same place - where the game drew it - so
-    // no amount of watching it in play tells the two apart. This sweeps the
-    // reticle across most of the screen on a period of a few seconds, with no
-    // tracker involved and ahead of every other gate in this function, so what
-    // it answers is only ever "does the game put the reticle where this mod
-    // asks". Wall clock rather than deltaTime because the units of that
-    // argument are an assumption and the point of a probe is to make none.
-    if (s_probe) {
-        float phase = static_cast<float>(GetTickCount64() % 3142u) * 0.002f;
-        float stageX = 0.4f * s_unitsPerScreenX * std::sin(phase);
-        SetMovieNumber(movie, "_root._x", stageX);
-        SetMovieNumber(movie, "_root._y", 0.0f);
-        if (!s_loggedProbe) {
-            s_loggedProbe = true;
-            Log::Line("ReticleHook: PROBE active - sweeping the reticle +/-%.0f stage units "
-                      "(40%% of the screen either side of centre). It is not tracking your "
-                      "head. Set ReticleProbe=false to restore normal placement.",
-                      0.4f * s_unitsPerScreenX);
-        }
-        return;
-    }
-
     const CameraView& view = CurrentCameraView();
     if (!view.valid) {
         return;
@@ -400,7 +375,6 @@ bool ReticleHook::Install(const BuildProfile& profile, const Config& cfg) {
     s_setVariableVfunc = profile.movieSetVariableVfunc;
     s_unitsPerMetre = profile.unitsPerMetre;
     s_diag = cfg.camera_dump;
-    s_probe = cfg.reticle_probe;
 
     HMODULE base = GetModuleHandleA(profile.module);
     if (!base) {

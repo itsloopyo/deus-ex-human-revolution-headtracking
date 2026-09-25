@@ -59,6 +59,18 @@
   which graphics DLLs are mapped a fraction of a second into the process - and
   says plainly that it is not the renderer. It read `d3d9=1 d3d11=0` on a game
   that renders through Direct3D 11 from start to finish.
+- `DeusExHumanRevolutionHeadTracking.ini` has a new layout. The first time this version starts, it converts the file once into the new layout and keeps the file as it was beside it as `DeusExHumanRevolutionHeadTracking.ini.pre-canonical`. `DeusExHumanRevolutionHeadTracking.ini.pre-canonical.last`, when present, is the file as it was before the most recent conversion: the mod converts the file again when it finds the older layout later, for example after an older version of the mod rewrote it.
+- Comments, and keys the mod never read, are not carried over. Nor are these, where your old file had them:
+  - A sensitivity, scale, deadzone, response curve or axis inversion you changed from its default. Set these in your tracker instead.
+  - Reticle settings, and a key that toggled the reticle.
+- Hotkeys are written as key names, and each hotkey lists every key that triggers it, the Ctrl+Shift chord included: `ToggleKey=End, Ctrl+Shift+Y`.
+- An older version of the mod may not read the new layout correctly. It reads a key that moved as its own default, and it can misread a hotkey or another value that is now written as a name. To go back to an older version, first copy `DeusExHumanRevolutionHeadTracking.ini.pre-canonical` back over `DeusExHumanRevolutionHeadTracking.ini`, which restores the old file.
+- Keys that moved or were renamed, each carried over with its value: `[General] Port` is `[Network] UdpPort`; `[General] PositionEnabled` is `[Position] PositionEnabled`, beside a new `[General] RotationEnabled`, and the two together are the tracking mode the game starts in; `[General] LeanCollision` is `[Position] CollisionEnabled`; `[General] LeanCollisionSkin` is `[Position] CollisionMargin`, still in metres; `[General] CameraDump` is `[Diagnostics] CameraDump`; `[Hotkeys] Toggle` and `ChordToggle` are `ToggleKey`, `Position` and `ChordPosition` are `CycleTrackingModeKey`, and `YawMode` and `ChordYawMode` are `YawModeKey`.
+- The tracking mode (`PageUp` / `Ctrl+Shift+G`) and the yaw mode (`PageDown` / `Ctrl+Shift+H`) are now saved to the file when you change them, and the game starts in them next time. `End` still changes the current session only: whether tracking is on when the game starts is `EnableOnStartup`.
+- An old file whose `Port` is outside 1024-65535 is left as it is and the mod still does not start, as before. Fix the value and the next start converts the file.
+- An old file whose `DataFreshnessMs` is below 1, which kept tracking from ever running, is not converted, because the new layout takes 1 or more. The mod runs on it as before, saves nothing, and converts it once the value is 1 or more.
+- When the mod cannot create its config file, for example in a folder it cannot write to, it now starts on the default settings and says so in `HeadTracking.log`. It used to stop without starting tracking.
+- The aim-down-sights mode cycle retired earlier in this release no longer reads its settings: `[General] AdsMode`, `[Hotkeys] Ads` and `[Hotkeys] ChordAds` are ignored and not carried over, and `Insert` / `Ctrl+Shift+U` do nothing. Head tracking stays on through the aim (15eeb54).
 
 ### Fixed
 
@@ -121,6 +133,12 @@
 - Removed the single `Smoothing` key and the hidden 0.15 baseline floor, so
   local users get zero-latency tracking by default. Both keys cover rotation
   and position.
+
+### Removed
+
+- `[General] ReticleProbe`, the discovery setting that swept the reticle across the screen instead of placing it on your aim. The reticle always follows the aim.
+- The sensitivity, axis inversion and deadzone settings: `[Sensitivity] Yaw`, `Pitch`, `Roll`, `InvertYaw`, `InvertPitch` and `InvertRoll`, and `[Smoothing] DeadzoneDeg`. Set these in your tracker app instead. With these settings at their shipped defaults the camera moves as it did before.
+- The warning about the retired `[Smoothing] Smoothing` key. The key was already ignored, and is not carried over.
 
 ## [0.0.0] - 2026-06-03
 

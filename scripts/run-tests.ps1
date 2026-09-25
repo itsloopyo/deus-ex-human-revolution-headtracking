@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$Config = 'Debug')
+param([string]$Config = 'Debug', [switch]$BuildOnly)
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 $BuildDir = Join-Path $ProjectRoot 'build-tests'
@@ -16,10 +16,11 @@ foreach ($line in Get-Content $provenance) {
 cmake -B $BuildDir -A Win32 -DDXHR_BUILD_TESTS=ON
 if ($LASTEXITCODE -ne 0) { throw "CMake configure failed ($LASTEXITCODE)" }
 
-foreach ($target in 'dxhr_config_sanitize_tests', 'dxhr_ads_tests', 'dxhr_config_differential_tests') {
+foreach ($target in 'dxhr_config_sanitize_tests', 'dxhr_ads_tests', 'dxhr_config_differential_tests', 'dxhr_config_tests') {
     cmake --build $BuildDir --config $Config --target $target
     if ($LASTEXITCODE -ne 0) { throw "Test build failed for $target ($LASTEXITCODE)" }
 }
+if ($BuildOnly) { return }
 
 ctest --test-dir $BuildDir -C $Config --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "Tests failed ($LASTEXITCODE)" }
