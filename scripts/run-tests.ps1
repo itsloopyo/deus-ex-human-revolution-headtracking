@@ -5,11 +5,15 @@ $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 $BuildDir = Join-Path $ProjectRoot 'build-tests'
 
 # The differential test is only as good as its claim about what it compiled.
+# SHA256 through .NET: Get-FileHash is not found when the CI runner's pwsh runs
+# this script under Windows PowerShell.
 $provenance = Join-Path $ProjectRoot 'tests/config_differential/provenance.txt'
+$sha256 = [System.Security.Cryptography.SHA256]::Create()
 foreach ($line in Get-Content $provenance) {
     if ($line -match '^\s*(#|$)') { continue }
     $hash, $path = ($line -split '\s+', 3)[0, 1]
-    $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $ProjectRoot $path)).Hash.ToLowerInvariant()
+    $bytes = [System.IO.File]::ReadAllBytes((Join-Path $ProjectRoot $path))
+    $actual = -join ($sha256.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') })
     if ($actual -ne $hash) { throw "$path has changed: sha256 $actual, provenance.txt records $hash" }
 }
 
