@@ -1,6 +1,6 @@
 #include "config.h"
 
-#include "config_sanitize.h"
+#include "legacy_config/legacy_config.h"
 #include "logging.h"
 
 #include "cameraunlock/config/ini_reader.h"
@@ -12,14 +12,10 @@ namespace DeusExHumanRevolutionHeadTracking {
 
 namespace {
 
-// Single source of truth for the INI defaults and the port validation bounds,
-// shared by the writer (WriteDefaultIni) and the reader (LoadOrCreate) so the
-// two cannot drift apart. The float-typed defaults widen to double for the
-// WriteDouble calls and match ReadFloat exactly on the read side.
+// The defaults WriteDefaultIni writes on first run. The frozen reader in
+// legacy_config/ holds its own copy, as the build it was taken from did.
 constexpr bool  kDefaultEnableOnStartup = true;
 constexpr int   kDefaultPort            = 4242;
-constexpr int   kMinPort                = 1024;
-constexpr int   kMaxPort                = 65535;
 constexpr int   kDefaultDataFreshnessMs = 500;
 constexpr bool  kDefaultWorldSpaceYaw   = true;
 constexpr float kDefaultSensitivity     = 1.0f;
@@ -99,29 +95,6 @@ void WriteDefaultIni(const char* path) {
     w.Close();
 }
 
-// Warned once per process rather than once per load: config is reloadable, and
-// repeating this on every reload buries it.
-//
-// The old value is deliberately NOT migrated into the new keys. The single
-// Smoothing value carried a hidden 0.15 floor, so the number in an existing
-// config does not mean what it used to: copying it across would hand a local
-// user smoothing they never chose under the new semantics, and copying it into
-// only one of the two keys would be a guess about which connection they were on.
-void WarnRetiredSmoothingKey(const cameraunlock::IniReader& reader,
-                             const char* section, const char* key) {
-    static bool warned = false;
-    if (warned) return;
-    if (reader.ReadString(section, key, "").empty()) return;
-    warned = true;
-    Log::Line(
-        "WARN: Config key [%s] %s has been retired and is IGNORED. Smoothing is now two "
-        "keys: LocalSmoothing (default 0, applies to a tracker on this machine) and "
-        "RemoteSmoothing (default 0.15, applies to a tracker on the network). The "
-        "old value is not migrated because the semantics changed - it carried a "
-        "hidden 0.15 floor that no longer exists. Set the two new keys.",
-        section, key);
-}
-
 }
 
 bool Config::LoadOrCreate(const char* iniPath) {
@@ -129,66 +102,40 @@ bool Config::LoadOrCreate(const char* iniPath) {
         WriteDefaultIni(iniPath);
     }
 
-    cameraunlock::IniReader ini;
-    if (!ini.Open(iniPath)) {
+    legacy::Config frozen;
+    const legacy::ReadResult read = frozen.Read(iniPath);
+    if (read.status == legacy::ReadStatus::Absent) {
         Log::Line("ERROR: Failed to open INI: %s", iniPath);
         return false;
     }
-
-    enabled_on_startup = ini.ReadBool("General", "EnableOnStartup", kDefaultEnableOnStartup);
-    int port = ini.ReadInt("General", "Port", kDefaultPort);
-    if (port < kMinPort || port > kMaxPort) {
-        Log::Line("ERROR: INI port %d out of range %d-%d", port, kMinPort, kMaxPort);
+    if (read.status == legacy::ReadStatus::Refused) {
         return false;
     }
-    udp_port = static_cast<uint16_t>(port);
-    data_freshness_ms = ini.ReadInt("General", "DataFreshnessMs", kDefaultDataFreshnessMs);
-    world_space_yaw = ini.ReadBool("General", "WorldSpaceYaw", kDefaultWorldSpaceYaw);
-    position_enabled = ini.ReadBool("General", "PositionEnabled", kDefaultPositionEnabled);
-    lean_collision = ini.ReadBool("General", "LeanCollision", kDefaultLeanCollision);
-    camera_dump = ini.ReadBool("General", "CameraDump", kDefaultCameraDump);
-    reticle_probe = ini.ReadBool("General", "ReticleProbe", kDefaultReticleProbe);
 
-    auto sanitize = [](const char* name, float raw, float clean) {
-        if (raw != clean) {
-            Log::Line("WARN: INI %s value %.4f out of range or non-finite; using %.4f",
-                      name, raw, clean);
-        }
-        return clean;
-    };
-
-    float rawSensYaw   = ini.ReadFloat("Sensitivity", "Yaw",   kDefaultSensitivity);
-    float rawSensPitch = ini.ReadFloat("Sensitivity", "Pitch", kDefaultSensitivity);
-    float rawSensRoll  = ini.ReadFloat("Sensitivity", "Roll",  kDefaultSensitivity);
-    sens_yaw   = sanitize("Sensitivity.Yaw",   rawSensYaw,   SanitizeSensitivity(rawSensYaw));
-    sens_pitch = sanitize("Sensitivity.Pitch", rawSensPitch, SanitizeSensitivity(rawSensPitch));
-    sens_roll  = sanitize("Sensitivity.Roll",  rawSensRoll,  SanitizeSensitivity(rawSensRoll));
-    invert_yaw   = ini.ReadBool("Sensitivity", "InvertYaw",   kDefaultInvert);
-    invert_pitch = ini.ReadBool("Sensitivity", "InvertPitch", kDefaultInvert);
-    invert_roll  = ini.ReadBool("Sensitivity", "InvertRoll",  kDefaultInvert);
-
-    float rawLeanSkin = ini.ReadFloat("General", "LeanCollisionSkin", kDefaultLeanSkinM);
-    lean_collision_skin_m = sanitize("General.LeanCollisionSkin", rawLeanSkin,
-                                     SanitizeLeanSkin(rawLeanSkin, kDefaultLeanSkinM));
-
-    float rawLocalSmoothing  = ini.ReadFloat("Smoothing", "LocalSmoothing",  kDefaultLocalSmoothing);
-    float rawRemoteSmoothing = ini.ReadFloat("Smoothing", "RemoteSmoothing", kDefaultRemoteSmoothing);
-    float rawDeadzone        = ini.ReadFloat("Smoothing", "DeadzoneDeg",     kDefaultDeadzoneDeg);
-    local_smoothing  = sanitize("Smoothing.LocalSmoothing",  rawLocalSmoothing,
-                                SanitizeSmoothing(rawLocalSmoothing, kDefaultLocalSmoothing));
-    remote_smoothing = sanitize("Smoothing.RemoteSmoothing", rawRemoteSmoothing,
-                                SanitizeSmoothing(rawRemoteSmoothing, kDefaultRemoteSmoothing));
-    deadzone_deg     = sanitize("Smoothing.DeadzoneDeg",     rawDeadzone,        SanitizeDeadzone(rawDeadzone));
-
-    WarnRetiredSmoothingKey(ini, "Smoothing", "Smoothing");
-
-    vk_toggle   = ini.ReadHex("Hotkeys", "Toggle",   kDefaultVkToggle);
-    vk_position = ini.ReadHex("Hotkeys", "Position", kDefaultVkPosition);
-    vk_yaw_mode = ini.ReadHex("Hotkeys", "YawMode",  kDefaultVkYawMode);
-    chord_toggle   = ini.ReadBool("Hotkeys", "ChordToggle",   kDefaultChord);
-    chord_position = ini.ReadBool("Hotkeys", "ChordPosition", kDefaultChord);
-    chord_yaw_mode = ini.ReadBool("Hotkeys", "ChordYawMode",  kDefaultChord);
-
+    enabled_on_startup = frozen.enabled_on_startup;
+    udp_port = frozen.udp_port;
+    sens_yaw = frozen.sens_yaw;
+    sens_pitch = frozen.sens_pitch;
+    sens_roll = frozen.sens_roll;
+    invert_yaw = frozen.invert_yaw;
+    invert_pitch = frozen.invert_pitch;
+    invert_roll = frozen.invert_roll;
+    local_smoothing = frozen.local_smoothing;
+    remote_smoothing = frozen.remote_smoothing;
+    deadzone_deg = frozen.deadzone_deg;
+    data_freshness_ms = frozen.data_freshness_ms;
+    world_space_yaw = frozen.world_space_yaw;
+    position_enabled = frozen.position_enabled;
+    lean_collision = frozen.lean_collision;
+    lean_collision_skin_m = frozen.lean_collision_skin_m;
+    camera_dump = frozen.camera_dump;
+    reticle_probe = frozen.reticle_probe;
+    vk_toggle = frozen.vk_toggle;
+    vk_position = frozen.vk_position;
+    vk_yaw_mode = frozen.vk_yaw_mode;
+    chord_toggle = frozen.chord_toggle;
+    chord_position = frozen.chord_position;
+    chord_yaw_mode = frozen.chord_yaw_mode;
     return true;
 }
 

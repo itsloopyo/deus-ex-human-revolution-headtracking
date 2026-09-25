@@ -1,0 +1,36 @@
+# What the config differential test compiles, and where each file came from.
+# scripts/run-tests.ps1 fails when a listed file no longer has its hash.
+#
+# Newest published build: the rolling 'dev' pre-release, tag dev at 9a3d6ce,
+# pinned to cameraunlock-core bb4a0f6. No v* release was published.
+#
+# Oracle: copies of 'git show dev:<path>' and of cameraunlock-core
+# 'git show bb4a0f6:cpp/<path>'.
+e81c4d439ddda0333addb94512dc6a7aac82832abdc7dc8aadb35411b5e1ba74  tests/config_differential/oracle/src/config.cpp  dev:src/config.cpp
+6805ac2ce56c6e3d51718eedcc82cc1d00a20ade5b5e62684a5e2104fe3ee583  tests/config_differential/oracle/src/config.h  dev:src/config.h
+58791d3a8f8687006c33b4baa66e270c8495b3789fb3377acb6d1be9a860b4a3  tests/config_differential/oracle/src/config_sanitize.h  dev:src/config_sanitize.h
+6a1bc783bf26b5e309b0da9638677611a1d5dc91dceb49d440c5b5100d9b678c  tests/config_differential/oracle/src/logging.h  dev:src/logging.h
+a7ffb44210ff59672fa97e8e5feaa2cb3e81938fcc0334a384c68bc371b3857a  tests/config_differential/oracle/core/include/cameraunlock/config/ini_reader.h  core bb4a0f6:cpp/include/cameraunlock/config/ini_reader.h
+e01515c2656aaf533bae4350dc45b702c3e3d4043935743dcc9bd5ea581fbe1c  tests/config_differential/oracle/core/src/config/ini_reader.cpp  core bb4a0f6:cpp/src/config/ini_reader.cpp
+94cd36b585e878e673566f602e9496417cb797970162fcc9c2af1e50e24358de  tests/config_differential/oracle/core/include/cameraunlock/ads/ads_mode.h  core bb4a0f6:cpp/include/cameraunlock/ads/ads_mode.h
+fc2146f8c585e5f610c7234e302f59de4945679cfa28ff479ca47477ec073f22  tests/config_differential/oracle/core/include/cameraunlock/math/smoothing_utils.h  core bb4a0f6:cpp/include/cameraunlock/math/smoothing_utils.h
+d7a905270933e3cb0c4c361d29d3fd701655498cbcd1875ea79d180468bdbe6a  tests/config_differential/oracle/core/include/cameraunlock/math/angle_utils.h  core bb4a0f6:cpp/include/cameraunlock/math/angle_utils.h
+43bdd2ef8554c78e5f440333463750c13b95110fe672b0b6e273244df9e7d169  tests/config_differential/oracle/core/include/cameraunlock/logging/file_log.h  core bb4a0f6:cpp/include/cameraunlock/logging/file_log.h
+73c53c2baa06bbfebe8211f62678aa2b60cb95f604743d3686951ba56b87ea47  tests/config_differential/oracle/core/src/logging/file_log.cpp  core bb4a0f6:cpp/src/logging/file_log.cpp
+#
+# The first-run output of the dev build, extracted once from the oracle.
+336fad691f6ee6d8e9812f58757e6951e7a634f519771a864b4a5aeb0f39f01d  tests/config_differential/data/dev-first-run.ini  dev first run
+#
+# The frozen import. Never edited once the conversion landed.
+2de980468fe0ce376867561b4ea4a168131fdf67e62a7136e3a48c1af1ccb06f  src/legacy_config/legacy_config.h  frozen import
+459e5236609a4323844640079778bbe7b5ed29dcee64b9098817b53ffc3719fb  src/legacy_config/legacy_config.cpp  frozen import
+ace6e9f7deea6195d89357b6b08a51b4f93f5f462b15268ea608b5f3631da194  src/legacy_config/config_sanitize.h  frozen import
+#
+# The core sources the import compiles. IniReader is frozen in core, and its
+# two files equal bb4a0f6's, so the import reads a file with the helpers the
+# published build had.
+a7ffb44210ff59672fa97e8e5feaa2cb3e81938fcc0334a384c68bc371b3857a  cameraunlock-core/cpp/include/cameraunlock/config/ini_reader.h  core bb4a0f6:cpp/include/cameraunlock/config/ini_reader.h
+e01515c2656aaf533bae4350dc45b702c3e3d4043935743dcc9bd5ea581fbe1c  cameraunlock-core/cpp/src/config/ini_reader.cpp  core bb4a0f6:cpp/src/config/ini_reader.cpp
+# Also compiled into the import, not frozen in core and equal to bb4a0f6's at the
+# conversion: math/smoothing_utils.h and math/angle_utils.h, for the two smoothing
+# defaults core holds constant, and logging/file_log.{h,cpp}, which only logs.

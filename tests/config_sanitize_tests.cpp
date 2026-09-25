@@ -1,10 +1,10 @@
-#include "config_sanitize.h"
+#include "legacy_config/config_sanitize.h"
 
 #include <cmath>
 #include <cstdio>
 #include <limits>
 
-using namespace DeusExHumanRevolutionHeadTracking;
+using namespace DeusExHumanRevolutionHeadTracking::legacy;
 
 namespace {
 

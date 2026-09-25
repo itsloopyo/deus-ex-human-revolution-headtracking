@@ -45,3 +45,8 @@
 *.asi binary
 *.pdb binary
 *.lib binary
+
+# The config differential test's inputs and its verbatim copies of published
+# sources are compared byte for byte, so git must not touch their line endings.
+tests/config_differential/data/** -text
+tests/config_differential/oracle/** -text

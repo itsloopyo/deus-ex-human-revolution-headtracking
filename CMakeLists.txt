@@ -28,6 +28,7 @@ set(MINHOOK_SOURCES
 set(MOD_SOURCES
     src/dllmain.cpp
     src/config.cpp
+    src/legacy_config/legacy_config.cpp
     src/path_utils.cpp
     src/tracking_runtime.cpp
     src/hotkeys.cpp
@@ -93,4 +94,39 @@ if(DXHR_BUILD_TESTS)
         target_compile_options(dxhr_ads_tests PRIVATE /W4 /WX /permissive-)
     endif()
     add_test(NAME ads COMMAND dxhr_ads_tests)
+
+    # The config differential test. The oracle is the newest published build's
+    # reader with the core sources it compiled, both copied verbatim into
+    # tests/config_differential/oracle; renaming its two namespaces lets it link
+    # beside the current core.
+    set(DXHR_ORACLE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests/config_differential/oracle)
+    add_library(dxhr_config_oracle STATIC
+        ${DXHR_ORACLE_DIR}/src/config.cpp
+        ${DXHR_ORACLE_DIR}/core/src/config/ini_reader.cpp
+        ${DXHR_ORACLE_DIR}/core/src/logging/file_log.cpp
+        tests/config_differential/oracle_adapter.cpp
+    )
+    target_include_directories(dxhr_config_oracle PRIVATE
+        ${DXHR_ORACLE_DIR}/src
+        ${DXHR_ORACLE_DIR}/core/include)
+    target_compile_definitions(dxhr_config_oracle PRIVATE
+        cameraunlock=dxhr_oracle_core
+        DeusExHumanRevolutionHeadTracking=dxhr_oracle)
+
+    add_executable(dxhr_config_differential_tests
+        tests/config_differential/differential_tests.cpp
+        src/legacy_config/legacy_config.cpp
+    )
+    target_include_directories(dxhr_config_differential_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/config_differential)
+    target_compile_definitions(dxhr_config_differential_tests PRIVATE
+        DXHR_DIFFERENTIAL_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/config_differential/data")
+    target_link_libraries(dxhr_config_differential_tests PRIVATE cameraunlock dxhr_config_oracle)
+    set_target_properties(dxhr_config_differential_tests PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests")
+    if(MSVC)
+        target_compile_options(dxhr_config_differential_tests PRIVATE /W4 /WX /permissive-)
+    endif()
+    add_test(NAME config_differential COMMAND dxhr_config_differential_tests)
 endif()
