@@ -78,6 +78,7 @@ bool             s_diag = false;
 cameraunlock::camera::LeanClamp s_leanClamp;
 bool  s_leanCollision = false;
 float s_leanSkinMetres = 0.0f;
+float s_leanReleaseSmoothing = 0.0f;
 
 std::atomic<uint64_t> s_callCount{0};
 
@@ -521,6 +522,7 @@ void ClampLeanToWorld(const float* world, float delta[3], float dt) {
 
     cameraunlock::camera::LeanClampSettings settings;
     settings.skin = EffectiveSkinUnits();
+    settings.release_smoothing = s_leanReleaseSmoothing;
     s_leanClamp.SetSettings(settings);
 
     // The engine reads the trace's start point as a whole vec4, and that point is
@@ -664,6 +666,7 @@ bool CameraHook::Install(const BuildProfile& profile, const Config& cfg, Trackin
     s_unitsPerMetre = profile.unitsPerMetre;
     s_leanCollision = cfg.collision_enabled;
     s_leanSkinMetres = cfg.lean_clamp.skin;
+    s_leanReleaseSmoothing = cfg.lean_clamp.release_smoothing;
     s_diag = cfg.camera_dump;
 
     HMODULE base = GetModuleHandleA(profile.module);  // null -> the EXE

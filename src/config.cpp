@@ -93,8 +93,8 @@ cameraunlock::config::ConfigTable<Config> MakeConfigTable() {
     cameraunlock::config::ConfigTable<Config> table = cameraunlock::config::HeadTrackingConfigTable<Config>(
         {Concept::UdpPort, Concept::EnableOnStartup, Concept::WorldSpaceYaw, Concept::RotationEnabled,
          Concept::DataFreshnessMs, Concept::LocalSmoothing, Concept::RemoteSmoothing, Concept::PositionEnabled,
-         Concept::CollisionEnabled, Concept::CollisionMargin, Concept::ToggleKey, Concept::CycleTrackingModeKey,
-         Concept::YawModeKey});
+         Concept::CollisionEnabled, Concept::CollisionMargin, Concept::CollisionReleaseSmoothing, Concept::ToggleKey,
+         Concept::CycleTrackingModeKey, Concept::YawModeKey});
     table.Select(Concept::WorldSpaceYaw).Writable()
         .Select(Concept::RotationEnabled).Writable()
         .Select(Concept::PositionEnabled).Writable();

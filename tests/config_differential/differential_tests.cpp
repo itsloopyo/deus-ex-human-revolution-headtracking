@@ -598,6 +598,11 @@ void Comparison2(Scratch& scratch, const Input& input, const ImportRun& import) 
     }
     if (m.collision_enabled != l.lean_collision) d.push_back("CollisionEnabled");
     if (!SameBits(m.lean_clamp.skin, l.lean_collision_skin_m)) d.push_back("CollisionMargin");
+    // The published build read no key for it and ran its lean clamp at
+    // LeanClampSettings' default release smoothing, 0.9 at core bb4a0f6.
+    if (!SameBits(m.lean_clamp.release_smoothing, 0.9f)) {
+        d.push_back("CollisionReleaseSmoothing");
+    }
     if (m.camera_dump != l.camera_dump) d.push_back("CameraDump");
     Check(d.empty(), input.name + ": migration differs from the import: " + Join(d));
 
