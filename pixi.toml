@@ -61,4 +61,7 @@ update-deps = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/update-d
 strip-loader = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/strip-loader-payload.ps1 -Path vendor/ultimate-asi-loader/dinput8.dll" }
 
 [dependencies]
-# No pixi dependencies - using system CMake and Visual Studio 2022.
+# CMake and Visual Studio come from the system. Node runs the canonical config lint in
+# `test`, which `package` depends on, and render-config's encode-seed. Pinned to the
+# release cameraunlock-core's own lock resolves.
+nodejs = "==26.5.0"

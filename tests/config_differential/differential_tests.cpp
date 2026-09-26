@@ -4,7 +4,10 @@
 // at 9a3d6ce, with the core sources it compiled at its pin bb4a0f6
 // (oracle_adapter.h). Import: the frozen reader in src/legacy_config/.
 //
-// Migration: the conversion, run by the config owner on a copy of the input.
+// Migration: the config owner's Load in a folder holding only the input as the
+// legacy file, which imports it into a new CameraUnlock.ini, then CameraUnlock.ini
+// read back by a second Load. Every owner reads one scratch Defaults.ini at the
+// built-in values, outside the folder.
 //
 // Comparison 1, oracle against import, on every input: load status, every
 // field both read (floats bit for bit), the startup state, and which actions
@@ -13,7 +16,13 @@
 //
 // Comparison 2, import against migration, on every input: the same, where the
 // only differences allowed are the approved drops the import records, and the
-// deferral kUnrepresentable describes.
+// deferral kUnrepresentable describes. Also asserted: the legacy file keeps its
+// bytes, its last write time and a read-only attribute, a read-only copy imports
+// as a writable one does, the folder holds nothing but the legacy file and
+// CameraUnlock.ini, and a second load reads CameraUnlock.ini, gives the same
+// settings and changes neither file. Each distinct CameraUnlock.ini the
+// migration wrote goes to DXHR_MIGRATED_DIR, which lint-migrated.mjs then holds
+// to core's canonical config lint.
 //
 // The key presses go through the published build's own Hotkeys::Start and the
 // guards it compiled (OracleFires), and through the guard the current build
@@ -41,6 +50,7 @@
 #include <functional>
 #include <iterator>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -64,17 +74,17 @@ const char* const kComparison1Differences[] = {
 // [General] DataFreshnessMs with no range, and a value below 1 (0 included,
 // which is what text that is not a number reads as) left tracking permanently
 // stale. The canonical row takes 1 to 2147483647 and core has no rule for a
-// value outside it, so the owner defers such a file: it stays as it is, the
-// session runs on what the import read, and nothing is saved.
+// value outside it, so the owner defers such a file: CameraUnlock.ini is not
+// created, the session runs on what the import read, and nothing is saved.
 const char* const kUnrepresentable =
     "[General] DataFreshnessMs below 1: not representable in the canonical row, so the conversion defers";
-
-constexpr const char* kFileName = "DeusExHumanRevolutionHeadTracking.ini";
 
 int g_failures = 0;
 int g_checks = 0;
 // How many inputs the migration ended in each load status, by status number.
 int g_statuses[6] = {};
+// Every distinct CameraUnlock.ini the migration wrote, for the lint.
+std::set<std::string> g_migrated;
 
 void Check(bool cond, const std::string& what) {
     ++g_checks;
@@ -333,11 +343,23 @@ public:
         }
         fs::remove_all(root_, ec);
     }
+    // Removes every Fresh folder so far, keeping Defaults.ini. Called after each
+    // input, so the corpus never has thousands of folders on disk at once.
+    void Clear() {
+        for (const auto& e : fs::recursive_directory_iterator(root_)) {
+            if (e.is_regular_file()) SetFileAttributesW(e.path().c_str(), FILE_ATTRIBUTE_NORMAL);
+        }
+        for (const auto& e : fs::directory_iterator(root_)) {
+            if (e.path().filename() != "global") fs::remove_all(e.path());
+        }
+    }
     fs::path Fresh(const std::string& leaf) {
         const fs::path dir = root_ / (leaf + std::to_string(next_++));
         fs::create_directories(dir);
         return dir;
     }
+    // Outside every Fresh folder. The first load creates it with the built-in values.
+    fs::path DefaultsPath() const { return root_ / "global" / "Defaults.ini"; }
 
 private:
     fs::path root_;
@@ -345,7 +367,7 @@ private:
 };
 
 fs::path Place(const fs::path& dir, const Input& input) {
-    const fs::path file = dir / kFileName;
+    const fs::path file = dir / kLegacyFileName;
     if (input.bytes) WriteBytes(file, *input.bytes);
     return file;
 }
@@ -390,19 +412,81 @@ ImportRun Comparison1(Scratch& scratch, const Input& input) {
     return import;
 }
 
+using cameraunlock::config::ConfigLoadResult;
 using cameraunlock::config::ConfigLoadStatus;
+using cameraunlock::config::DefaultsFile;
 using cameraunlock::config::DropRule;
 using cameraunlock::config::DroppedValue;
 using cameraunlock::config::ImportResult;
 using cameraunlock::config::ImportStatus;
 
-cameraunlock::config::ConfigOwnerOptions<Config> OwnerOptions(const fs::path& file) {
-    cameraunlock::config::ConfigOwnerOptions<Config> options;
-    options.path = file.wstring();
-    options.table = MakeConfigTable();
-    options.import = MakeLegacyImport();
-    options.header.display_name = kConfigDisplayName;
-    return options;
+ConfigLoadResult<Config> LoadFolder(Scratch& scratch, const fs::path& folder) {
+    cameraunlock::config::ConfigOwner<Config> owner(
+        MakeOwnerOptions(folder, DefaultsFile::At(scratch.DefaultsPath().wstring())));
+    return owner.Load();
+}
+
+// Every row the table binds, as the renderer writes it: two configs that
+// render the same hold the same settings.
+std::string RenderValues(const Config& c) {
+    return cameraunlock::config::RenderCanonical(MakeConfigTable(), c,
+                                                 cameraunlock::config::RenderHeader{kConfigDisplayName});
+}
+
+// RenderValues for two configs, one of which may hold the DataFreshnessMs the
+// renderer refuses (kUnrepresentable): that field is compared on its own, and
+// every other row by rendering.
+bool SameSettings(const Config& a, const Config& b) {
+    Config x = a, y = b;
+    if (x.data_freshness_ms != y.data_freshness_ms) return false;
+    x.data_freshness_ms = y.data_freshness_ms = 1;
+    return RenderValues(x) == RenderValues(y);
+}
+
+struct FileState {
+    std::string bytes;
+    fs::file_time_type written;
+    bool read_only;
+};
+
+FileState StateOf(const fs::path& file) {
+    const DWORD attrs = GetFileAttributesW(file.c_str());
+    if (attrs == INVALID_FILE_ATTRIBUTES) throw std::runtime_error("no attributes for " + file.string());
+    return {ReadBytes(file), fs::last_write_time(file), (attrs & FILE_ATTRIBUTE_READONLY) != 0};
+}
+
+bool SameState(const FileState& a, const FileState& b) {
+    return a.bytes == b.bytes && a.written == b.written && a.read_only == b.read_only;
+}
+
+std::vector<std::string> FileNames(const fs::path& dir) {
+    std::vector<std::string> names;
+    for (const auto& e : fs::directory_iterator(dir)) names.push_back(e.path().filename().string());
+    std::sort(names.begin(), names.end());
+    return names;
+}
+
+// One migration of `input` in a fresh folder, the legacy file read-only or not.
+struct Migration {
+    fs::path folder;
+    ConfigLoadResult<Config> loaded;
+    std::optional<FileState> legacyBefore;
+    std::optional<FileState> legacyAfter;
+    std::vector<std::string> files;
+};
+
+Migration Migrate(Scratch& scratch, const Input& input, bool readOnly) {
+    Migration m;
+    m.folder = scratch.Fresh(readOnly ? "migration-ro" : "migration");
+    const fs::path legacy = Place(m.folder, input);
+    if (input.bytes) {
+        if (readOnly) SetReadOnly(legacy, true);
+        m.legacyBefore = StateOf(legacy);
+    }
+    m.loaded = LoadFolder(scratch, m.folder);
+    if (input.bytes) m.legacyAfter = StateOf(legacy);
+    m.files = FileNames(m.folder);
+    return m;
 }
 
 // The import with its map, on its own copy, for the values it drops.
@@ -448,40 +532,53 @@ void CheckPoseShaping(const ImportResult& imported, const char* section, const c
 }
 
 void Comparison2(Scratch& scratch, const Input& input, const ImportRun& import) {
-    const fs::path file = Place(scratch.Fresh("migration"), input);
-    std::optional<cameraunlock::config::ConfigLoadResult<Config>> loaded;
-    {
-        cameraunlock::config::ConfigOwner<Config> owner(OwnerOptions(file));
-        loaded = owner.Load();
+    const Migration writable = Migrate(scratch, input, false);
+    const ConfigLoadResult<Config>& loaded = writable.loaded;
+    ++g_statuses[static_cast<int>(loaded.status)];
+
+    const std::vector<std::string> legacyOnly{kLegacyFileName};
+    const std::vector<std::string> both{kConfigFileName, kLegacyFileName};
+    if (input.bytes) {
+        Check(SameState(*writable.legacyBefore, *writable.legacyAfter),
+              input.name + ": the load changed the legacy file's bytes, write time or attributes");
+        const Migration readOnly = Migrate(scratch, input, true);
+        Check(SameState(*readOnly.legacyBefore, *readOnly.legacyAfter) && readOnly.legacyAfter->read_only,
+              input.name + ": the load changed a read-only legacy file");
+        Check(readOnly.loaded.status == loaded.status && readOnly.files == writable.files &&
+                  SameSettings(readOnly.loaded.config, loaded.config),
+              input.name + ": a read-only legacy file does not import as a writable one does");
+        if (readOnly.files == both && writable.files == both) {
+            Check(ReadBytes(readOnly.folder / kConfigFileName) == ReadBytes(writable.folder / kConfigFileName),
+                  input.name + ": a read-only legacy file imports into other bytes");
+        }
     }
-    const fs::path copy = fs::path(file.wstring() + L".pre-canonical");
-    ++g_statuses[static_cast<int>(loaded->status)];
 
     bool deferred = false;
     if (!input.bytes) {
-        Check(loaded->status == ConfigLoadStatus::Created, input.name + ": no file is not Created");
+        Check(loaded.status == ConfigLoadStatus::Created, input.name + ": no file is not Created");
+        Check(writable.files == std::vector<std::string>{kConfigFileName},
+              input.name + ": Created left another file beside CameraUnlock.ini");
     } else if (import.result.status == legacy::ReadStatus::Refused) {
-        Check(loaded->status == ConfigLoadStatus::LegacyRefused, input.name + ": a refused file is not LegacyRefused");
-        Check(ReadBytes(file) == *input.bytes, input.name + ": a refused file was changed");
-        Check(!fs::exists(copy), input.name + ": a refused file got a copy");
+        Check(loaded.status == ConfigLoadStatus::LegacyRefused, input.name + ": a refused file is not LegacyRefused");
+        Check(writable.files == legacyOnly, input.name + ": a refused import created a file");
         return;
     } else if (import.config.data_freshness_ms < 1) {
         // The session runs on the Config the deferral hands back, so everything
-        // below up to the converted-file checks applies to it too.
-        Check(loaded->status == ConfigLoadStatus::Deferred, input.name + ": " + kUnrepresentable + ", not deferred");
-        Check(ReadBytes(file) == *input.bytes, input.name + ": a deferred file was changed");
-        Check(!fs::exists(copy), input.name + ": a deferred file got a copy");
-        if (loaded->status != ConfigLoadStatus::Deferred) return;
+        // below up to the CameraUnlock.ini checks applies to it too.
+        Check(loaded.status == ConfigLoadStatus::Deferred, input.name + ": " + kUnrepresentable + ", not deferred");
+        Check(writable.files == legacyOnly, input.name + ": a deferred import created a file");
+        if (loaded.status != ConfigLoadStatus::Deferred) return;
         deferred = true;
     } else {
-        Check(loaded->status == ConfigLoadStatus::Migrated,
-              input.name + ": not Migrated but " + cameraunlock::config::ConfigLoadStatusName(loaded->status));
-        if (loaded->status != ConfigLoadStatus::Migrated) return;
-        Check(ReadBytes(copy) == *input.bytes, input.name + ": .pre-canonical is not the input");
+        Check(loaded.status == ConfigLoadStatus::Migrated,
+              input.name + ": not Migrated but " + cameraunlock::config::ConfigLoadStatusName(loaded.status) + ": " +
+                  loaded.reason);
+        if (loaded.status != ConfigLoadStatus::Migrated) return;
+        Check(writable.files == both, input.name + ": the import left a file other than CameraUnlock.ini");
     }
 
     const legacy::Config& l = import.config;
-    const Config& m = loaded->config;
+    const Config& m = loaded.config;
     std::vector<std::string> d;
     if (m.enable_on_startup != l.enabled_on_startup) d.push_back("EnableOnStartup");
     if (m.udp_port != l.udp_port) d.push_back("UdpPort");
@@ -534,25 +631,43 @@ void Comparison2(Scratch& scratch, const Input& input, const ImportRun& import) 
 
     if (deferred) return;
 
-    // The converted file: the reader and the table find nothing to report,
-    // rendering what was read gives the same bytes, and the next launch
-    // converts nothing.
+    // CameraUnlock.ini: the reader and the table find nothing to report, and the
+    // next launch reads it, over the same Defaults.ini, into the same settings
+    // without importing and without writing either file.
+    const fs::path file = writable.folder / kConfigFileName;
     const std::string bytes = ReadBytes(file);
     const cameraunlock::config::CanonicalIni doc = cameraunlock::config::ParseCanonicalIni(bytes);
     Config reread;
     const cameraunlock::config::ApplyReport report = cameraunlock::config::ApplyCanonical(doc, MakeConfigTable(), reread);
     Check(doc.IsReadable() && doc.diagnostics.empty() && report.diagnostics.empty(),
-          input.name + ": the converted file draws diagnostics");
-    Check(cameraunlock::config::RenderCanonical(MakeConfigTable(), reread,
-                                                cameraunlock::config::RenderHeader{kConfigDisplayName}) == bytes,
-          input.name + ": rendering the re-read file gives other bytes");
-    {
-        cameraunlock::config::ConfigOwner<Config> again(OwnerOptions(file));
-        Check(again.Load().status == ConfigLoadStatus::Canonical, input.name + ": the converted file converted again");
+          input.name + ": CameraUnlock.ini draws diagnostics");
+    g_migrated.insert(bytes);
+
+    const fs::file_time_type written = fs::last_write_time(file);
+    const ConfigLoadResult<Config> again = LoadFolder(scratch, writable.folder);
+    Check(again.status == ConfigLoadStatus::Canonical, input.name + ": the second load did not read CameraUnlock.ini");
+    Check(RenderValues(again.config) == RenderValues(m), input.name + ": the second load gives other settings");
+    Check(ReadBytes(file) == bytes && fs::last_write_time(file) == written,
+          input.name + ": the second load rewrote CameraUnlock.ini");
+    if (input.bytes) {
+        Check(SameState(*writable.legacyBefore, StateOf(writable.folder / kLegacyFileName)),
+              input.name + ": the second load changed the legacy file");
     }
-    Check(ReadBytes(file) == bytes, input.name + ": the next launch rewrote the converted file");
-    Check(!fs::exists(fs::path(file.wstring() + L".pre-canonical.last")),
-          input.name + ": the next launch kept another copy");
+    Check(FileNames(writable.folder) == writable.files, input.name + ": the second load left another file");
+}
+
+// Each distinct CameraUnlock.ini the migration wrote, for lint-migrated.mjs.
+void WriteMigrated() {
+    const fs::path dir = DXHR_MIGRATED_DIR;
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    int n = 0;
+    for (const std::string& bytes : g_migrated) {
+        char name[32];
+        std::snprintf(name, sizeof name, "%04d.ini", n++);
+        WriteBytes(dir / name, bytes);
+    }
+    std::printf("  %d distinct CameraUnlock.ini files written for the lint\n", n);
 }
 
 std::vector<Input> Inputs(const std::string& firstRun) {
@@ -579,7 +694,7 @@ int main() {
         Check(!firstRun.empty(), "data/dev-first-run.ini is missing");
         {
             const fs::path dir = scratch.Fresh("first-run");
-            const fs::path file = dir / kFileName;
+            const fs::path file = dir / kLegacyFileName;
             Check(dxhr_oracle_view::RunOracle(file.string()).loaded, "the oracle did not load its own first run");
             Check(ReadBytes(file) == firstRun, "the oracle's first-run output differs from data/dev-first-run.ini");
         }
@@ -589,7 +704,11 @@ int main() {
         for (const char* d : kComparison1Differences) std::printf("  recorded difference: %s\n", d);
         std::printf("comparison 2 (the import against the migration)\n");
         std::printf("  recorded departure: %s\n", kUnrepresentable);
-        for (const Input& input : inputs) Comparison2(scratch, input, Comparison1(scratch, input));
+        for (const Input& input : inputs) {
+            Comparison2(scratch, input, Comparison1(scratch, input));
+            scratch.Clear();
+        }
+        WriteMigrated();
     } catch (const std::exception& e) {
         std::printf("  FAIL: threw: %s\n", e.what());
         ++g_failures;

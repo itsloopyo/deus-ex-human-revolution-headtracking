@@ -29,4 +29,8 @@ if ($BuildOnly) { return }
 ctest --test-dir $BuildDir -C $Config --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "Tests failed ($LASTEXITCODE)" }
 
+# The differential test writes every distinct CameraUnlock.ini it migrated here.
+node (Join-Path $ProjectRoot 'tests/config_differential/lint-migrated.mjs') (Join-Path $BuildDir 'tests/migrated')
+if ($LASTEXITCODE -ne 0) { throw "Canonical config lint failed ($LASTEXITCODE)" }
+
 Write-Host 'All tests passed' -ForegroundColor Green

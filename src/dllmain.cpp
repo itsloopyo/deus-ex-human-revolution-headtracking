@@ -17,6 +17,7 @@
 #include <windows.h>
 #include <process.h>
 
+#include <filesystem>
 #include <optional>
 
 namespace {
@@ -39,9 +40,8 @@ std::optional<cameraunlock::config::ConfigOwner<DeusExHumanRevolutionHeadTrackin
 
 void LogSave(const cameraunlock::config::ConfigSaveResult& saved) {
     using namespace DeusExHumanRevolutionHeadTracking;
-    if (saved.status == cameraunlock::config::ConfigSaveStatus::Saved) return;
     for (const std::string& line : saved.log) Log::Line("%s", line.c_str());
-    Log::Line("WARN: %s", saved.reason.c_str());
+    if (saved.status != cameraunlock::config::ConfigSaveStatus::Saved) Log::Line("WARN: %s", saved.reason.c_str());
 }
 
 void CycleTrackingModeAndSave() {
@@ -97,12 +97,8 @@ unsigned __stdcall InitThread(void*) {
         return 1;
     }
 
-    cameraunlock::config::ConfigOwnerOptions<Config> options;
-    options.path = GetModulePathW(kConfigFileName);
-    options.table = MakeConfigTable();
-    options.import = MakeLegacyImport();
-    options.header.display_name = kConfigDisplayName;
-    g_configOwner.emplace(std::move(options));
+    g_configOwner.emplace(MakeOwnerOptions(std::filesystem::path(GetModulePathW(kConfigFileName)).parent_path(),
+                                           cameraunlock::config::DefaultsFile::PerUser()));
 
     const cameraunlock::config::ConfigLoadResult<Config> loaded = g_configOwner->Load();
     for (const std::string& line : loaded.log) Log::Line("%s", line.c_str());

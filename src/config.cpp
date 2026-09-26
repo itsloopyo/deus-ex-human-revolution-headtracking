@@ -7,6 +7,7 @@
 #include "cameraunlock/tracking/tracking_mode.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace DeusExHumanRevolutionHeadTracking {
@@ -107,6 +108,18 @@ cameraunlock::config::ConfigTable<Config> MakeConfigTable() {
 
 cameraunlock::config::LegacyImport<Config> MakeLegacyImport() {
     return {&Import, legacy::ReadKeys()};
+}
+
+cameraunlock::config::ConfigOwnerOptions<Config> MakeOwnerOptions(const std::filesystem::path& folder,
+                                                                  cameraunlock::config::DefaultsFile defaults) {
+    cameraunlock::config::ConfigOwnerOptions<Config> options;
+    options.path = (folder / kConfigFileName).wstring();
+    options.table = MakeConfigTable();
+    options.import = MakeLegacyImport();
+    options.legacy_path = (folder / kLegacyFileName).wstring();
+    options.header.display_name = kConfigDisplayName;
+    options.defaults = std::move(defaults);
+    return options;
 }
 
 }

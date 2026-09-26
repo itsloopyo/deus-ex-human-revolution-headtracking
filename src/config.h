@@ -1,12 +1,20 @@
 #pragma once
 
+#include "cameraunlock/config/config_owner.h"
 #include "cameraunlock/config/config_table.h"
+#include "cameraunlock/config/defaults_file.h"
 #include "cameraunlock/config/head_tracking_config.h"
 #include "cameraunlock/config/legacy_import.h"
 
+#include <filesystem>
+
 namespace DeusExHumanRevolutionHeadTracking {
 
-constexpr const char* kConfigFileName = "DeusExHumanRevolutionHeadTracking.ini";
+constexpr const char* kConfigFileName = "CameraUnlock.ini";
+// The file every build before the canonical format read, beside CameraUnlock.ini.
+// It is imported once while CameraUnlock.ini is absent and never written, so an
+// older build still reads it after a rollback.
+constexpr const char* kLegacyFileName = "DeusExHumanRevolutionHeadTracking.ini";
 // The game's name as cameraunlock-core's data/games.json spells it.
 constexpr const char* kConfigDisplayName = "Deus Ex: Human Revolution - Director's Cut";
 
@@ -27,5 +35,10 @@ cameraunlock::config::ConfigTable<Config> MakeConfigTable();
 
 // The pre-canonical reader (legacy_config/), mapped into Config.
 cameraunlock::config::LegacyImport<Config> MakeLegacyImport();
+
+// The owner of CameraUnlock.ini in `folder`, importing the legacy file beside it.
+// The mod passes DefaultsFile::PerUser(), every test DefaultsFile::At.
+cameraunlock::config::ConfigOwnerOptions<Config> MakeOwnerOptions(const std::filesystem::path& folder,
+                                                                  cameraunlock::config::DefaultsFile defaults);
 
 }

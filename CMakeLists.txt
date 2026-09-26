@@ -125,7 +125,8 @@ if(DXHR_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/config_differential)
     target_compile_definitions(dxhr_config_differential_tests PRIVATE
-        DXHR_DIFFERENTIAL_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/config_differential/data")
+        DXHR_DIFFERENTIAL_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/config_differential/data"
+        DXHR_MIGRATED_DIR="${CMAKE_BINARY_DIR}/tests/migrated")
     target_link_libraries(dxhr_config_differential_tests PRIVATE cameraunlock dxhr_config_oracle)
     set_target_properties(dxhr_config_differential_tests PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests")
