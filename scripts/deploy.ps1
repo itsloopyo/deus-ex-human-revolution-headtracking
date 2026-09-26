@@ -42,7 +42,6 @@ Write-DeploymentSuccess `
         "End       - Toggle head tracking on/off",
         "Page Up   - Cycle tracking mode (rotation+position / rotation-only / position-only)",
         "Page Down - Toggle yaw mode (world / local)",
-        "Insert    - Cycle ADS mode (paused / marker / tracked)",
         "",
-        "No nav cluster? Chords: Ctrl+Shift+ Y=Toggle G=Mode H=Yaw U=ADS"
+        "No nav cluster? Chords: Ctrl+Shift+ Y=Toggle G=Mode H=Yaw"
     )
