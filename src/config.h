@@ -37,7 +37,7 @@ cameraunlock::config::ConfigTable<Config> MakeConfigTable();
 cameraunlock::config::LegacyImport<Config> MakeLegacyImport();
 
 // The owner of CameraUnlock.ini in `folder`, importing the legacy file beside it.
-// The mod passes DefaultsFile::PerUser(), every test DefaultsFile::At.
+// The mod passes the player's own Defaults.ini, and every test a scratch one.
 cameraunlock::config::ConfigOwnerOptions<Config> MakeOwnerOptions(const std::filesystem::path& folder,
                                                                   cameraunlock::config::DefaultsFile defaults);
 
