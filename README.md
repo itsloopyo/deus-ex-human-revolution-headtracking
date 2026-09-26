@@ -4,11 +4,12 @@
 
 An unofficial head tracking mod for Deus Ex: Human Revolution - Director's Cut that moves the view with your head while your mouse or controller keeps aiming, driven by a webcam, phone, or any OpenTrack compatible tracker, with no VR headset required.
 
-Updating from an earlier build? This version converts
-`DeusExHumanRevolutionHeadTracking.ini` to a new layout the first time it starts,
-keeps your old file beside it, and saves the tracking mode and yaw mode you pick
-in game. [Configuration](#configuration) lists what carries over and what does
-not.
+Updating from an earlier build? Settings now live in `CameraUnlock.ini` in the
+game folder. The first start reads your settings from
+`DeusExHumanRevolutionHeadTracking.ini` and writes them into `CameraUnlock.ini`,
+and never changes `DeusExHumanRevolutionHeadTracking.ini`. The tracking mode and
+yaw mode you pick in game are saved to `CameraUnlock.ini`.
+[Configuration](#configuration) lists what carries over and what does not.
 
 ## Features
 
@@ -120,13 +121,15 @@ Two equivalent binding sets - use whichever your keyboard has:
 3. Rotational tracking disabled, positional tracking enabled
 4. Back to normal
 
-The tracking mode and the yaw mode are saved to the config file as you change
+The tracking mode and the yaw mode are saved to `CameraUnlock.ini` as you change
 them, and the game starts in them next time. `End` turns tracking on or off for
-the current session only; `EnableOnStartup` in the config file decides whether
+the current session only; `EnableOnStartup` in `CameraUnlock.ini` decides whether
 tracking is on when the game starts.
 
-Each action lists its keys in the `[Hotkeys]` section of the config file, the
+Each action lists its keys in the `[Hotkeys]` section of `CameraUnlock.ini`, the
 chord included, so you can rebind or remove either: `ToggleKey=End, Ctrl+Shift+Y`.
+A new file holds `default` there, which takes the keys from `Defaults.ini` (see
+[Configuration](#configuration)).
 
 ### Aiming down sights
 
@@ -141,9 +144,17 @@ them.
 ## Configuration
 
 <!-- cameraunlock:config -->
-The mod reads its settings from `DeusExHumanRevolutionHeadTracking.ini` in the game folder, and creates the file when it starts and finds none. Edit it with any text editor.
+The mod reads its settings from `CameraUnlock.ini` in the game folder, and creates the file when it starts and finds none. Edit it with any text editor.
 
-Earlier versions of the mod used an older layout for this file. The first time this version starts, it converts the file once into the layout below and keeps the file as it was beside it as `DeusExHumanRevolutionHeadTracking.ini.pre-canonical`. `DeusExHumanRevolutionHeadTracking.ini.pre-canonical.last`, when present, is the file as it was before the most recent conversion: the mod converts the file again when it finds the older layout later, for example after an older version of the mod rewrote it.
+A setting set to `default` takes its value from `Defaults.ini`, which every head tracking mod that keeps its settings in `CameraUnlock.ini` reads. Head tracking mods that keep their settings in another file do not read it, and neither do earlier versions of this mod. Writing a value in place of `default` changes that setting for this game only. When the mod saves a setting that a hotkey changed in game, it writes the new value in place of `default`, so that setting no longer follows `Defaults.ini` in this game until you set it to `default` again.
+
+`Defaults.ini` is `%AppData%\CameraUnlock\Defaults.ini` on Windows; `$XDG_CONFIG_HOME/CameraUnlock/Defaults.ini` on Linux, or `~/.config/CameraUnlock/Defaults.ini` where `XDG_CONFIG_HOME` is not set, under Wine and Proton too; and `~/Library/Application Support/CameraUnlock/Defaults.ini` on macOS. The mod's log, where it writes one, names the file it read.
+
+When the mod starts and finds no `Defaults.ini`, it creates one holding the built-in values, unless Windows runs the game as a packaged app. The mod never changes `Defaults.ini` after that. Edit it with any text editor.
+
+Earlier versions of the mod kept these settings in `DeusExHumanRevolutionHeadTracking.ini`, in the same folder. The first time this version starts and finds no `CameraUnlock.ini`, it reads your settings from `DeusExHumanRevolutionHeadTracking.ini` and writes them into `CameraUnlock.ini`. It never changes `DeusExHumanRevolutionHeadTracking.ini`, and does not read it again while `CameraUnlock.ini` exists.
+
+A setting that the defaults below set to `default` is written as `default` when the value imported for it equals its default at that start, which is the value `Defaults.ini` gives it, or the built-in value where `Defaults.ini` gives none. It then follows `Defaults.ini`. Every other setting is written with the value imported for it. `RotationEnabled` and `PositionEnabled` are one setting here, the tracking mode, so both are written as `default` or neither is.
 
 Comments, and keys the mod never read, are not carried over. Nor are these, where your old file had them:
 
@@ -151,7 +162,25 @@ Comments, and keys the mod never read, are not carried over. Nor are these, wher
 - A sensitivity, scale, deadzone, response curve or axis inversion you changed from its default. Set these in your tracker instead.
 - The setting for a feature that earlier versions shipped switched off while it was untested. It now follows the mod's default.
 
-An older version of the mod may not read the new layout correctly. It reads a key that moved as its own default, and it can misread a hotkey or another value that is now written as a name. To go back to an older version, first copy `DeusExHumanRevolutionHeadTracking.ini.pre-canonical` back over `DeusExHumanRevolutionHeadTracking.ini`, which restores the old file.
+An older version of the mod reads `DeusExHumanRevolutionHeadTracking.ini` and never reads `CameraUnlock.ini`, so a setting you change after updating is not in `DeusExHumanRevolutionHeadTracking.ini`.
+
+Deleting only `CameraUnlock.ini` makes the next start read `DeusExHumanRevolutionHeadTracking.ini` again. To go back to the defaults, replace everything in `CameraUnlock.ini` with the defaults below. Every setting they set to `default` then follows `Defaults.ini`.
+
+The built-in value of each setting set to `default` below:
+
+- `UdpPort=4242`
+- `EnableOnStartup=true`
+- `WorldSpaceYaw=true`
+- `RotationEnabled=true`
+- `DataFreshnessMs=500`
+- `LocalSmoothing=0.0`
+- `RemoteSmoothing=0.15`
+- `PositionEnabled=true`
+- `CollisionEnabled=true`
+- `CollisionReleaseSmoothing=0.9`
+- `ToggleKey=End, Ctrl+Shift+Y`
+- `CycleTrackingModeKey=PageUp, Ctrl+Shift+G`
+- `YawModeKey=PageDown, Ctrl+Shift+H`
 
 With every setting at its default, the file reads:
 
@@ -159,6 +188,12 @@ With every setting at its default, the file reads:
 ; Deus Ex: Human Revolution - Director's Cut head tracking settings.
 ; Comments start with ; and go on their own line. Text after a value is part of the value.
 ; Hotkeys are key names such as End, PageUp or Ctrl+Shift+Y. Separate several with commas; leave empty for none.
+; A setting set to default takes its value from Defaults.ini, which every head tracking mod
+; that keeps its settings in CameraUnlock.ini reads: %AppData%\CameraUnlock\Defaults.ini on
+; Windows, $XDG_CONFIG_HOME/CameraUnlock/Defaults.ini (normally ~/.config/CameraUnlock) on
+; Linux, under Wine and Proton too, and ~/Library/Application Support/CameraUnlock/Defaults.ini
+; on macOS. The log names the file it read. Write a value instead of default to change that
+; setting for this game only.
 
 [CameraUnlock]
 ; Written by the mod. Leave this section in place.
@@ -166,44 +201,47 @@ ConfigFormat=1
 
 [Network]
 ; UDP port the mod receives tracker data on (OpenTrack protocol).
-UdpPort=4242
+UdpPort=default
 
 [General]
 ; true: head tracking is on when the game starts. ToggleKey turns it on and off.
-EnableOnStartup=true
+EnableOnStartup=default
 ; true: yaw turns around the world's up axis. false: around the camera's own up axis.
-WorldSpaceYaw=true
+WorldSpaceYaw=default
 ; true: turning your head turns the view.
 ; Tracking mode at startup, with PositionEnabled. The mode hotkey changes both.
-RotationEnabled=true
+RotationEnabled=default
 ; Milliseconds a tracker packet stays current. Once the tracker has sent nothing
 ; for this long, the mod stops following it until data arrives again.
-DataFreshnessMs=500
+DataFreshnessMs=default
 
 [Smoothing]
 ; Smoothing when the tracker runs on this PC. 0 is the least, 1 the most.
-LocalSmoothing=0.0
+LocalSmoothing=default
 ; Smoothing when the tracker is another device on the network, such as a phone.
 ; 0 is the least, 1 the most.
-RemoteSmoothing=0.15
+RemoteSmoothing=default
 
 [Position]
 ; true: moving your head moves the view.
 ; Tracking mode at startup, with RotationEnabled. The mode hotkey changes both.
-PositionEnabled=true
+PositionEnabled=default
 ; true: leaning stops at walls instead of moving the view through them.
-CollisionEnabled=true
+CollisionEnabled=default
 ; How far, in metres, the view is held off a wall when you lean into it.
 ; A value inside the camera's near clip plane is raised to clear it.
-CollisionMargin=0.19
+; CollisionMargin=0.19
+; How gently the view eases back out after a wall stopped a lean.
+; 0 is the quickest, 1 the slowest.
+CollisionReleaseSmoothing=default
 
 [Hotkeys]
 ; Turns head tracking on and off.
-ToggleKey=End, Ctrl+Shift+Y
+ToggleKey=default
 ; Changes the tracking mode: rotation and position, rotation only, position only.
-CycleTrackingModeKey=PageUp, Ctrl+Shift+G
+CycleTrackingModeKey=default
 ; Switches yaw between the world's up axis and the camera's own (WorldSpaceYaw).
-YawModeKey=PageDown, Ctrl+Shift+H
+YawModeKey=default
 
 [Diagnostics]
 ; true: write camera and reticle diagnostics to HeadTracking.log, for troubleshooting.
@@ -231,6 +269,10 @@ Leaning is stopped by the level rather than passing through it. With
 `CollisionEnabled=true` the mod asks the game's own collision what stands between
 the eye and where the tracker wants it, and shortens the lean to fit.
 `CollisionMargin` is how far off a blocking surface to hold the eye, in metres.
+The file shows it commented out at this game's own 0.19 (`; CollisionMargin=0.19`);
+delete the `; ` and change the number to set it. `CollisionReleaseSmoothing` is
+how gently the view eases back out once a wall stops the lean, from 0 (quickest)
+to 1 (slowest).
 
 Only what you see is affected. The question is asked about the camera the game
 is aiming with, so where shots go and what an interaction prompt picks are the
@@ -248,17 +290,17 @@ number it used.
 ## Troubleshooting
 
 - **No head tracking in game:** check `HeadTracking.log` next to `DXHRDC.exe` exists after launching. If not, the ASI loader is not engaging - re-run `install.cmd`. The log is rewritten from scratch on every launch; the previous launch is kept as `HeadTracking.prev.log`, which is the one to send if the game crashed and you have relaunched since.
-- **Tracking is jittery:** raise `LocalSmoothing` (tracker on this PC) or `RemoteSmoothing` (tracker on your phone or another device) in the config file (0.0-1.0).
+- **Tracking is jittery:** raise `LocalSmoothing` (tracker on this PC) or `RemoteSmoothing` (tracker on your phone or another device) in `CameraUnlock.ini` (0.0-1.0).
 - **View drifts:** centre it in your tracker app. The mod applies whatever pose the tracker sends, so the tracker owns the centre.
 - **Yaw feels wrong when looking up or down at extreme angles:** try toggling between world-locked and camera-local yaw with `Page Down` (or `Ctrl+Shift+H`). World-locked (default) is horizon-stable; camera-local follows the camera's current up-axis.
 - **The weapon is off to one side when I aim down sights:** your head is turned: the weapon stays on your aim and you are looking past it. Turn back to it, or move your aim to where you are looking.
 - **A wall opens into a polygonal cutaway when you press into it:** the eye is inside the camera's near clip plane, where geometry stops being drawn. Raise `CollisionMargin`. The mod already holds the eye clear of the plane it reads from the frame, so if this happens at the default, send the `lean-trace` line from `HeadTracking.log` - it names the near plane that frame was built with.
-- **Leaning still goes through walls:** search `HeadTracking.log` for `lean-trace`. A line saying the lean is running unclamped names what the mod could not read - until that clears the clamp cannot run, and the lean is applied whole. `CollisionEnabled=false` in the config file has the same effect deliberately.
+- **Leaning still goes through walls:** search `HeadTracking.log` for `lean-trace`. A line saying the lean is running unclamped names what the mod could not read - until that clears the clamp cannot run, and the lean is applied whole. `CollisionEnabled=false` in `CameraUnlock.ini` has the same effect deliberately.
 
 ## Updating / Uninstalling
 
 - Update: run the new version's `install.cmd` - it redeploys in place.
-- Uninstall: run `uninstall.cmd`. It removes the mod and, if we installed it, the ASI loader. It leaves `DeusExHumanRevolutionHeadTracking.ini` in place, so a reinstall keeps your settings.
+- Uninstall: run `uninstall.cmd`. It removes the mod and, if we installed it, the ASI loader. It leaves `CameraUnlock.ini` and `DeusExHumanRevolutionHeadTracking.ini` in place, so a reinstall keeps your settings, and does not touch `Defaults.ini`.
 
 ## Building from source
 

@@ -35,12 +35,16 @@
   standoff inside it stops the eye short of the wall while the wall itself is
   still too close to be drawn, so it opens into a polygonal cutaway. A
   configured value below the plane is raised to clear it and the log says so.
-  An older file without these keys gets them, at their defaults, when the mod
-  converts it to the new layout.
+  An older file without these keys is imported into `CameraUnlock.ini` with
+  both at their defaults.
 - 6DOF position tracking. Leaning moves the eye through the world, resolved
   against the camera's clean axes so a lean follows the body rather than the
   head-turned view, and scaled by the engine's own 316.05 units-per-metre
   constant.
+- A setting set to `default` in `CameraUnlock.ini` takes its value from `Defaults.ini`, which every head tracking mod that keeps its settings in `CameraUnlock.ini` reads. Head tracking mods that keep their settings in another file do not read it, and neither do earlier versions of this mod. Writing a value in place of `default` changes that setting for this game only. When the mod saves a setting that a hotkey changed in game, it writes the new value in place of `default`, so that setting no longer follows `Defaults.ini` in this game until you set it to `default` again.
+- `Defaults.ini` is `%AppData%\CameraUnlock\Defaults.ini` on Windows; `$XDG_CONFIG_HOME/CameraUnlock/Defaults.ini` on Linux, or `~/.config/CameraUnlock/Defaults.ini` where `XDG_CONFIG_HOME` is not set, under Wine and Proton too; and `~/Library/Application Support/CameraUnlock/Defaults.ini` on macOS. The mod's log, where it writes one, names the file it read.
+- When the mod starts and finds no `Defaults.ini`, it creates one holding the built-in values, unless Windows runs the game as a packaged app. The mod never changes `Defaults.ini` after that.
+- `[Position] CollisionReleaseSmoothing`, how gently the view eases back out once a wall stops a lean, from 0 (quickest) to 1 (slowest). It starts at `default`, whose built-in value is 0.9, the easing the lean clamp has always used.
 
 ### Changed
 
@@ -48,18 +52,21 @@
   which graphics DLLs are mapped a fraction of a second into the process - and
   says plainly that it is not the renderer. It read `d3d9=1 d3d11=0` on a game
   that renders through Direct3D 11 from start to finish.
-- `DeusExHumanRevolutionHeadTracking.ini` has a new layout. The first time this version starts, it converts the file once into the new layout and keeps the file as it was beside it as `DeusExHumanRevolutionHeadTracking.ini.pre-canonical`. `DeusExHumanRevolutionHeadTracking.ini.pre-canonical.last`, when present, is the file as it was before the most recent conversion: the mod converts the file again when it finds the older layout later, for example after an older version of the mod rewrote it.
+- Settings move to `CameraUnlock.ini`. Earlier versions of the mod kept these settings in `DeusExHumanRevolutionHeadTracking.ini`, in the same folder. The first time this version starts and finds no `CameraUnlock.ini`, it reads your settings from `DeusExHumanRevolutionHeadTracking.ini` and writes them into `CameraUnlock.ini`. It never changes `DeusExHumanRevolutionHeadTracking.ini`, and does not read it again while `CameraUnlock.ini` exists.
+- A setting that the defaults the README shows set to `default` is written as `default` when the value imported for it equals its default at that start, which is the value `Defaults.ini` gives it, or the built-in value where `Defaults.ini` gives none. It then follows `Defaults.ini`. Every other setting is written with the value imported for it.
+- `RotationEnabled` and `PositionEnabled` are one setting here, the tracking mode, so both are written as `default` or neither is.
 - Comments, and keys the mod never read, are not carried over. Nor are these, where your old file had them:
   - A sensitivity, scale, deadzone, response curve or axis inversion you changed from its default. Set these in your tracker instead.
   - Reticle settings, and a key that toggled the reticle.
   - The setting for a feature that earlier versions shipped switched off while it was untested. It now follows the mod's default.
+- An older version of the mod reads `DeusExHumanRevolutionHeadTracking.ini` and never reads `CameraUnlock.ini`, so a setting you change after updating is not in `DeusExHumanRevolutionHeadTracking.ini`.
+- Deleting only `CameraUnlock.ini` makes the next start read `DeusExHumanRevolutionHeadTracking.ini` again. To go back to the defaults, replace everything in `CameraUnlock.ini` with the defaults the README shows. Every setting they set to `default` then follows `Defaults.ini`.
 - Hotkeys are written as key names, and each hotkey lists every key that triggers it, the Ctrl+Shift chord included: `ToggleKey=End, Ctrl+Shift+Y`.
-- An older version of the mod may not read the new layout correctly. It reads a key that moved as its own default, and it can misread a hotkey or another value that is now written as a name. To go back to an older version, first copy `DeusExHumanRevolutionHeadTracking.ini.pre-canonical` back over `DeusExHumanRevolutionHeadTracking.ini`, which restores the old file.
 - Keys that moved or were renamed, each carried over with its value: `[General] Port` is `[Network] UdpPort`; `[General] PositionEnabled` is `[Position] PositionEnabled`, beside a new `[General] RotationEnabled`, and the two together are the tracking mode the game starts in; `[General] LeanCollision` is `[Position] CollisionEnabled`; `[General] LeanCollisionSkin` is `[Position] CollisionMargin`, still in metres; `[General] CameraDump` is `[Diagnostics] CameraDump`; `[Hotkeys] Toggle` and `ChordToggle` are `ToggleKey`, `Position` and `ChordPosition` are `CycleTrackingModeKey`, and `YawMode` and `ChordYawMode` are `YawModeKey`.
-- The tracking mode (`PageUp` / `Ctrl+Shift+G`) and the yaw mode (`PageDown` / `Ctrl+Shift+H`) are now saved to the file when you change them, and the game starts in them next time. `End` still changes the current session only: whether tracking is on when the game starts is `EnableOnStartup`.
-- An old file whose `Port` is outside 1024-65535 is left as it is and the mod still does not start, as before. Fix the value and the next start converts the file.
-- An old file whose `DataFreshnessMs` is below 1, which kept tracking from ever running, is not converted, because the new layout takes 1 or more. The mod runs on it as before, saves nothing, and converts it once the value is 1 or more.
-- When the mod cannot create its config file, for example in a folder it cannot write to, it now starts on the default settings and says so in `HeadTracking.log`. It used to stop without starting tracking.
+- The tracking mode (`PageUp` / `Ctrl+Shift+G`) and the yaw mode (`PageDown` / `Ctrl+Shift+H`) are now saved to `CameraUnlock.ini` when you change them, and the game starts in them next time. `End` still changes the current session only: whether tracking is on when the game starts is `EnableOnStartup`.
+- A `DeusExHumanRevolutionHeadTracking.ini` whose `Port` is outside 1024-65535 is not imported and the mod still does not start, as before. Fix the value and the next start imports the file.
+- A `DeusExHumanRevolutionHeadTracking.ini` whose `DataFreshnessMs` is below 1, which kept tracking from ever running, is not imported, because `CameraUnlock.ini` takes 1 or more. No `CameraUnlock.ini` is created, the mod runs on the old file's settings as before and saves nothing, and the first start after the value is 1 or more imports it.
+- When the mod cannot create `CameraUnlock.ini`, for example in a folder it cannot write to, it now starts anyway, on the settings it read from `DeusExHumanRevolutionHeadTracking.ini` or on the defaults where there is no such file, saves nothing that session, and says so in `HeadTracking.log`. Earlier versions, finding no config file and unable to create one, stopped without starting tracking.
 - The aim-down-sights mode cycle retired earlier in this release no longer reads its settings: `[General] AdsMode`, `[Hotkeys] Ads` and `[Hotkeys] ChordAds` are ignored and not carried over, and `Insert` / `Ctrl+Shift+U` do nothing. Head tracking stays on through the aim (15eeb54).
 
 ### Fixed
