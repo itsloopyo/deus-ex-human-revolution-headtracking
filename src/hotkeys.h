@@ -13,7 +13,7 @@ public:
     using Action = std::function<void()>;
 
     bool Start(const Config& cfg, Action onToggle,
-               Action onCycleMode, Action onYawMode);
+               Action onCycleMode, Action onYawMode, Action onTrueFreeLook);
     void Stop();
 
 private:

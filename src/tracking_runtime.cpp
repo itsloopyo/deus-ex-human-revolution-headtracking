@@ -40,6 +40,8 @@ bool TrackingRuntime::Start(const Config& cfg) {
 
     m_enabled.store(m_cfg.enable_on_startup, std::memory_order_relaxed);
     m_worldSpaceYaw.store(m_cfg.world_space_yaw, std::memory_order_relaxed);
+    m_trueFreeLook.store(m_cfg.true_free_look, std::memory_order_relaxed);
+    Log::Line("True free look: %s", m_cfg.true_free_look ? "ON" : "OFF (sights locked)");
     return true;
 }
 
@@ -76,6 +78,13 @@ bool TrackingRuntime::ToggleYawMode() {
     return !prev;
 }
 
+bool TrackingRuntime::ToggleTrueFreeLook() {
+    const bool next = !m_trueFreeLook.load(std::memory_order_relaxed);
+    m_trueFreeLook.store(next, std::memory_order_relaxed);
+    Log::Line("True free look: %s", next ? "ON" : "OFF (sights locked)");
+    return next;
+}
+
 bool TrackingRuntime::IsPoseFresh() const {
     const std::int64_t lastUs = m_receiver.GetLastReceiveTimestamp();
     if (lastUs == 0) {
@@ -110,7 +119,8 @@ bool TrackingRuntime::SamplePerFrame(HeadPose& out) {
 
     // Asked last, after every gate above has had its say, so a frame tracking
     // stands down on never reads the sights at all.
-    const AdsLean::Pose shaped = m_adsLean.Apply(SightsAreUp(), absolute, GetTickCount64());
+    const AdsLean::Pose shaped = m_adsLean.Apply(
+        SightsAreUp(), m_trueFreeLook.load(std::memory_order_relaxed), absolute, GetTickCount64());
 
     out.rotation_valid = rotationValid;
     out.yaw = shaped.yaw;

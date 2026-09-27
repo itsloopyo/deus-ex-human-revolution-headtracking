@@ -51,7 +51,7 @@ void HipFirePassesThrough() {
     std::printf("hip fire\n");
     AdsLean lean;
     for (unsigned long long t = 0; t < 1000; t += 16) {
-        const AdsLean::Pose out = lean.Apply(false, kHead, t);
+        const AdsLean::Pose out = lean.Apply(false, false, kHead, t);
         RotationUntouched(out, "at the hip");
         Near(out.x, kHead.x, 1e-6f, "x passes through at the hip");
         Near(out.y, kHead.y, 1e-6f, "y passes through at the hip");
@@ -62,15 +62,15 @@ void HipFirePassesThrough() {
 void SightsUpDropsTheLeanOnly() {
     std::printf("sights up\n");
     AdsLean lean;
-    lean.Apply(false, kHead, 0);
+    lean.Apply(false, false, kHead, 0);
 
     // Raising the sights does not move the view: the first aiming frame is the
     // whole pose, rotation and lean alike.
-    const AdsLean::Pose first = lean.Apply(true, kHead, 1);
+    const AdsLean::Pose first = lean.Apply(true, false, kHead, 1);
     RotationUntouched(first, "on the frame the sights come up");
     Near(first.x, kHead.x, 1e-4f, "the lean has not started easing on the first frame");
 
-    const AdsLean::Pose settled = lean.Apply(true, kHead, 1 + AdsFade::kLowerMs);
+    const AdsLean::Pose settled = lean.Apply(true, false, kHead, 1 + AdsFade::kLowerMs);
     RotationUntouched(settled, "with the sights up");
     Near(settled.x, 0.0f, 1e-6f, "x is zero with the sights up");
     Near(settled.y, 0.0f, 1e-6f, "y is zero with the sights up");
@@ -78,15 +78,15 @@ void SightsUpDropsTheLeanOnly() {
 
     // Head keeps moving through the aim, and rotation keeps following it.
     const AdsLean::Pose turned =
-        lean.Apply(true, Pose(-25.0f, 5.0f, -10.0f, 0.2f, 0.1f, 0.1f), 2 + AdsFade::kLowerMs);
+        lean.Apply(true, false, Pose(-25.0f, 5.0f, -10.0f, 0.2f, 0.1f, 0.1f), 2 + AdsFade::kLowerMs);
     Near(turned.yaw, -25.0f, 1e-5f, "rotation tracks the head through the aim");
     Near(turned.roll, -10.0f, 1e-5f, "roll tracks the head through the aim");
     Near(turned.x, 0.0f, 1e-6f, "the lean stays out while aiming");
 
     // And back at the hip the lean returns in full.
-    lean.Apply(false, kHead, 3 + AdsFade::kLowerMs);
+    lean.Apply(false, false, kHead, 3 + AdsFade::kLowerMs);
     const AdsLean::Pose back =
-        lean.Apply(false, kHead, 3 + AdsFade::kLowerMs + AdsFade::kRaiseMs);
+        lean.Apply(false, false, kHead, 3 + AdsFade::kLowerMs + AdsFade::kRaiseMs);
     RotationUntouched(back, "after the sights come down");
     Near(back.x, kHead.x, 1e-6f, "the lean is back in full once the weapon is down");
     Near(back.z, kHead.z, 1e-6f, "z is back in full once the weapon is down");
@@ -95,9 +95,9 @@ void SightsUpDropsTheLeanOnly() {
 void MidTransitionScalesTheLean() {
     std::printf("mid-transition\n");
     AdsLean lean;
-    lean.Apply(false, kHead, 0);
-    lean.Apply(true, kHead, 0);
-    const AdsLean::Pose mid = lean.Apply(true, kHead, AdsFade::kLowerMs / 2);
+    lean.Apply(false, false, kHead, 0);
+    lean.Apply(true, false, kHead, 0);
+    const AdsLean::Pose mid = lean.Apply(true, false, kHead, AdsFade::kLowerMs / 2);
     RotationUntouched(mid, "mid-transition");
 
     const float scale = mid.x / kHead.x;
@@ -111,20 +111,20 @@ void ReversalDoesNotStep() {
     // A tap of the aim button: pressed, then released a frame or two later. The
     // return leg starts from where the fade is, so the lean never jumps.
     AdsLean lean;
-    lean.Apply(false, kHead, 0);
-    lean.Apply(true, kHead, 0);
-    const AdsLean::Pose pressed = lean.Apply(true, kHead, 32);
-    const AdsLean::Pose released = lean.Apply(false, kHead, 33);
+    lean.Apply(false, false, kHead, 0);
+    lean.Apply(true, false, kHead, 0);
+    const AdsLean::Pose pressed = lean.Apply(true, false, kHead, 32);
+    const AdsLean::Pose released = lean.Apply(false, false, kHead, 33);
     Near(released.x, pressed.x, 0.01f, "releasing a tap continues from where the fade was");
     RotationUntouched(released, "across a reversal");
 
     // Repeated taps: no frame-to-frame step larger than a smooth fade allows.
     AdsLean taps;
-    float prevX = taps.Apply(false, kHead, 0).x;
+    float prevX = taps.Apply(false, false, kHead, 0).x;
     float worst = 0.0f;
     for (unsigned long long t = 16; t < 2000; t += 16) {
         const bool aiming = ((t / 48) % 2) == 1;
-        const float x = taps.Apply(aiming, kHead, t).x;
+        const float x = taps.Apply(aiming, false, kHead, t).x;
         const float step = std::fabs(x - prevX);
         if (step > worst) worst = step;
         prevX = x;
@@ -135,12 +135,51 @@ void ReversalDoesNotStep() {
 void SuppressReturnsToTheHip() {
     std::printf("suppress\n");
     AdsLean lean;
-    lean.Apply(false, kHead, 0);
-    lean.Apply(true, kHead, 0);
-    lean.Apply(true, kHead, AdsFade::kLowerMs);
+    lean.Apply(false, false, kHead, 0);
+    lean.Apply(true, false, kHead, 0);
+    lean.Apply(true, false, kHead, AdsFade::kLowerMs);
     lean.Suppress();
-    const AdsLean::Pose out = lean.Apply(false, kHead, AdsFade::kLowerMs + 1);
+    const AdsLean::Pose out = lean.Apply(false, false, kHead, AdsFade::kLowerMs + 1);
     Near(out.x, kHead.x, 1e-6f, "after a suppression the next hip frame has the full lean");
+}
+
+void TrueFreeLookKeepsTheLean() {
+    std::printf("true free look\n");
+    AdsLean lean;
+    for (unsigned long long t = 0; t < 1000; t += 16) {
+        const AdsLean::Pose hip = lean.Apply(false, true, kHead, t);
+        RotationUntouched(hip, "at the hip in true free look");
+        Near(hip.x, kHead.x, 1e-6f, "x passes through at the hip in true free look");
+    }
+    for (unsigned long long t = 1000; t < 2000; t += 16) {
+        const AdsLean::Pose aimed = lean.Apply(true, true, kHead, t);
+        RotationUntouched(aimed, "with the sights up in true free look");
+        Near(aimed.x, kHead.x, 1e-6f, "x passes through with the sights up in true free look");
+        Near(aimed.y, kHead.y, 1e-6f, "y passes through with the sights up in true free look");
+        Near(aimed.z, kHead.z, 1e-6f, "z passes through with the sights up in true free look");
+    }
+}
+
+void ToggleMidAimRidesTheFade() {
+    std::printf("toggle mid-aim\n");
+    // Sights up in sights locked, lean partway out, then the player switches to
+    // true free look without lowering the weapon: the lean comes back from where
+    // it was rather than stepping, and the same holds switching back.
+    AdsLean lean;
+    lean.Apply(true, false, kHead, 0);
+    const AdsLean::Pose locked = lean.Apply(true, false, kHead, 60);
+    const AdsLean::Pose freed = lean.Apply(true, true, kHead, 61);
+    Near(freed.x, locked.x, 0.01f, "switching to true free look mid-fade continues from where it was");
+    RotationUntouched(freed, "across the switch to true free look");
+
+    const AdsLean::Pose full = lean.Apply(true, true, kHead, 61 + AdsFade::kRaiseMs);
+    Near(full.x, kHead.x, 1e-6f, "true free look brings the whole lean back with the sights up");
+
+    const AdsLean::Pose relocked = lean.Apply(true, false, kHead, 62 + AdsFade::kRaiseMs);
+    Near(relocked.x, full.x, 0.01f, "switching back to sights locked does not step the lean");
+    const AdsLean::Pose out = lean.Apply(true, false, kHead, 62 + AdsFade::kRaiseMs + AdsFade::kLowerMs);
+    Near(out.x, 0.0f, 1e-6f, "back in sights locked the lean eases out again");
+    RotationUntouched(out, "after switching back to sights locked");
 }
 
 }  // namespace
@@ -152,6 +191,8 @@ int main() {
     MidTransitionScalesTheLean();
     ReversalDoesNotStep();
     SuppressReturnsToTheHip();
+    TrueFreeLookKeepsTheLean();
+    ToggleMidAimRidesTheFade();
     if (g_failures == 0) {
         std::printf("all passed\n");
         return 0;

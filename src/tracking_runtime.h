@@ -39,6 +39,7 @@ public:
     // Each returns the state it switched to.
     cameraunlock::TrackingMode CycleTrackingMode();
     bool ToggleYawMode();
+    bool ToggleTrueFreeLook();
     bool IsWorldSpaceYaw() const { return m_worldSpaceYaw.load(std::memory_order_relaxed); }
 
 private:
@@ -60,6 +61,7 @@ private:
 
     std::atomic<bool> m_enabled{false};
     std::atomic<bool> m_worldSpaceYaw{true};
+    std::atomic<bool> m_trueFreeLook{false};
 
     // Touched only from the camera hook's frame, which is the one thread that
     // calls SamplePerFrame.

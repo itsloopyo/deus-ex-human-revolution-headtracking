@@ -59,6 +59,12 @@ void ToggleYawModeAndSave() {
         [worldSpace](DeusExHumanRevolutionHeadTracking::Config& c) { c.world_space_yaw = worldSpace; }));
 }
 
+void ToggleTrueFreeLookAndSave() {
+    const bool trueFreeLook = g_tracking.ToggleTrueFreeLook();
+    LogSave(g_configOwner->Save(
+        [trueFreeLook](DeusExHumanRevolutionHeadTracking::Config& c) { c.true_free_look = trueFreeLook; }));
+}
+
 unsigned __stdcall InitThread(void*) {
     using namespace DeusExHumanRevolutionHeadTracking;
 
@@ -123,7 +129,8 @@ unsigned __stdcall InitThread(void*) {
     if (!g_hotkeys.Start(cfg,
                         [] { g_tracking.ToggleEnabled(); },
                         [] { CycleTrackingModeAndSave(); },
-                        [] { ToggleYawModeAndSave(); })) {
+                        [] { ToggleYawModeAndSave(); },
+                        [] { ToggleTrueFreeLookAndSave(); })) {
         Log::Line("ERROR: Hotkeys start failed");
         g_tracking.Stop();
         return 1;
@@ -144,7 +151,8 @@ unsigned __stdcall InitThread(void*) {
     }
 
     // Whether the sights are up. The tracking runtime polls it every frame to
-    // ease the lean out while aiming.
+    // ease the lean out while aiming in sights locked, and keeps polling it in
+    // true free look so the fade is ready the moment the player toggles back.
     g_adsHook.Install(*profile);
 
     // The reticle only needs moving once aim is decoupled, so it follows the

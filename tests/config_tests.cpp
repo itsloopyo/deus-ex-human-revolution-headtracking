@@ -221,6 +221,12 @@ void SaveTests(Scratch& scratch, const std::string& committed) {
           "the position-only save did not change exactly the pair");
 
     before = ReadBytes(file);
+    CheckSaved(owner.Save([](Config& c) { c.true_free_look = true; }), "the true free look save");
+    changed = ChangedLines(before, ReadBytes(file));
+    Check(changed.size() == 1 && changed[0] == "TrueFreeLook=default -> TrueFreeLook=true",
+          "the true free look save changed more than its line");
+
+    before = ReadBytes(file);
     CheckSaved(owner.Save([](Config&) {}), "an empty save");
     Check(ReadBytes(file) == before, "an empty save wrote the file");
 
@@ -235,8 +241,36 @@ void SaveTests(Scratch& scratch, const std::string& committed) {
     Check(ReadBytes(scratch.DefaultsPath()) == defaultsBefore, "a save changed Defaults.ini");
 
     const cameraunlock::config::ConfigLoadResult<Config> loaded = scratch.Owner(folder).Load();
-    Check(!loaded.config.world_space_yaw && !loaded.config.rotation_enabled && loaded.config.position_enabled,
+    Check(!loaded.config.world_space_yaw && !loaded.config.rotation_enabled && loaded.config.position_enabled &&
+              loaded.config.true_free_look,
           "the saved toggles did not come back at the next load");
+}
+
+// True free look is off unless the player turned it on. The retired ADS cycle's
+// key is never read as it: `tracked` was not free look.
+void TrueFreeLookTests(Scratch& scratch, const std::string& committed) {
+    std::printf("true free look\n");
+    Check(!Config().true_free_look, "TrueFreeLook does not default to false");
+
+    const fs::path fresh = scratch.Folder("free-look-fresh");
+    Check(!scratch.Owner(fresh).Load().config.true_free_look, "a created file loads with true free look on");
+
+    const fs::path canonical = scratch.Folder("free-look-ads-mode");
+    std::string withAdsMode = committed;
+    const std::string anchor = "[Position]\r\n";
+    const std::size_t at = withAdsMode.find(anchor);
+    Check(at != std::string::npos, "the committed file has no [Position] section");
+    withAdsMode.insert(at + anchor.size(), "AdsMode=tracked\r\n");
+    WriteBytes(canonical / kConfigFileName, withAdsMode);
+    const cameraunlock::config::ConfigLoadResult<Config> loaded = scratch.Owner(canonical).Load();
+    Check(loaded.status == ConfigLoadStatus::Canonical, "a file carrying AdsMode does not load as Canonical");
+    Check(!loaded.config.true_free_look, "AdsMode=tracked was read as true free look");
+
+    const fs::path legacy = scratch.Folder("free-look-legacy");
+    WriteBytes(legacy / kLegacyFileName, "[General]\r\nAdsMode=tracked\r\n[Hotkeys]\r\nAds=0x2D\r\n");
+    const cameraunlock::config::ConfigLoadResult<Config> imported = scratch.Owner(legacy).Load();
+    Check(imported.status == ConfigLoadStatus::Migrated, "a legacy file carrying AdsMode is not Migrated");
+    Check(!imported.config.true_free_look, "a legacy AdsMode=tracked was imported as true free look");
 }
 
 }  // namespace
@@ -260,6 +294,7 @@ int main(int argc, char** argv) {
         RenderTest(committed);
         FreshEqualsUpgrade(scratch, committed, firstRun);
         SaveTests(scratch, committed);
+        TrueFreeLookTests(scratch, committed);
     } catch (const std::exception& e) {
         std::printf("  FAIL: threw: %s\n", e.what());
         ++g_failures;

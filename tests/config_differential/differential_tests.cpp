@@ -463,13 +463,14 @@ const std::set<Concept>& GlobalRows() {
         Concept::RotationEnabled,  Concept::PositionEnabled,           Concept::DataFreshnessMs,
         Concept::LocalSmoothing,   Concept::RemoteSmoothing,           Concept::CollisionEnabled,
         Concept::CollisionReleaseSmoothing, Concept::ToggleKey,        Concept::CycleTrackingModeKey,
-        Concept::YawModeKey,
+        Concept::YawModeKey,       Concept::TrueFreeLook,              Concept::TrueFreeLookKey,
     };
     return rows;
 }
 
 // The rows the player never changed from dev's defaults, the mode pair as one
-// unit. CollisionReleaseSmoothing had no key, so no player changed it.
+// unit. CollisionReleaseSmoothing, TrueFreeLook and TrueFreeLookKey had no key,
+// so no player changed them.
 std::set<Concept> UntouchedRows(const legacy::Config& l) {
     const legacy::Config d;
     std::set<Concept> changed;
@@ -526,6 +527,8 @@ void CopyRow(Concept row, const Config& from, Config& to) {
         case Concept::ToggleKey: to.toggle_key_name = from.toggle_key_name; break;
         case Concept::CycleTrackingModeKey: to.cycle_tracking_mode_key_name = from.cycle_tracking_mode_key_name; break;
         case Concept::YawModeKey: to.yaw_mode_key_name = from.yaw_mode_key_name; break;
+        case Concept::TrueFreeLook: to.true_free_look = from.true_free_look; break;
+        case Concept::TrueFreeLookKey: to.true_free_look_key_name = from.true_free_look_key_name; break;
         default: throw std::logic_error("no fields for a row the table does not bind");
     }
 }
@@ -539,8 +542,9 @@ const char* const kSkewedDefaults =
     "[Network]\r\nUdpPort=5353\r\n\r\n"
     "[General]\r\nEnableOnStartup=false\r\nWorldSpaceYaw=false\r\nRotationEnabled=false\r\nDataFreshnessMs=750\r\n\r\n"
     "[Smoothing]\r\nLocalSmoothing=0.5\r\nRemoteSmoothing=0.45\r\n\r\n"
-    "[Position]\r\nPositionEnabled=true\r\nCollisionEnabled=false\r\nCollisionReleaseSmoothing=0.4\r\n\r\n"
-    "[Hotkeys]\r\nToggleKey=F8\r\nCycleTrackingModeKey=F9\r\nYawModeKey=F10\r\n";
+    "[Position]\r\nPositionEnabled=true\r\nCollisionEnabled=false\r\nCollisionReleaseSmoothing=0.4\r\n"
+    "TrueFreeLook=true\r\n\r\n"
+    "[Hotkeys]\r\nToggleKey=F8\r\nCycleTrackingModeKey=F9\r\nYawModeKey=F10\r\nTrueFreeLookKey=F11\r\n";
 
 // The settings the skewed Defaults.ini gives every row in GlobalRows.
 Config SkewedConfig() {
@@ -745,6 +749,9 @@ void Comparison2(Scratch& scratch, const Input& input, const ImportRun& import) 
         d.push_back("CollisionReleaseSmoothing");
     }
     if (m.camera_dump != l.camera_dump) d.push_back("CameraDump");
+    // The published build had no true free look: the lean stays eased out
+    // through the aim, as it was, and the toggle takes core's keys.
+    if (m.true_free_look) d.push_back("TrueFreeLook");
     Check(d.empty(), input.name + ": migration differs from the import: " + Join(d));
 
     // The running mod keeps the processor's identity sensitivity, inversion and

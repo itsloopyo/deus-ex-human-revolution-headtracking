@@ -24,22 +24,23 @@ std::vector<cameraunlock::input::KeyBinding> Parse(const std::string& list) {
 }
 
 bool Hotkeys::Start(const Config& cfg, Action onToggle,
-                    Action onCycleMode, Action onYawMode) {
+                    Action onCycleMode, Action onYawMode, Action onTrueFreeLook) {
     if (m_started) return true;
 
     using cameraunlock::input::RegisterKeyBindings;
     RegisterKeyBindings(m_poller, Parse(cfg.toggle_key_name), std::move(onToggle));
     RegisterKeyBindings(m_poller, Parse(cfg.cycle_tracking_mode_key_name), std::move(onCycleMode));
     RegisterKeyBindings(m_poller, Parse(cfg.yaw_mode_key_name), std::move(onYawMode));
+    RegisterKeyBindings(m_poller, Parse(cfg.true_free_look_key_name), std::move(onTrueFreeLook));
 
     if (!m_poller.Start(16)) {
         Log::Line("ERROR: HotkeyPoller failed to start");
         return false;
     }
 
-    Log::Line("Hotkeys: toggle=[%s] cycle mode=[%s] yaw mode=[%s]",
+    Log::Line("Hotkeys: toggle=[%s] cycle mode=[%s] yaw mode=[%s] true free look=[%s]",
               cfg.toggle_key_name.c_str(), cfg.cycle_tracking_mode_key_name.c_str(),
-              cfg.yaw_mode_key_name.c_str());
+              cfg.yaw_mode_key_name.c_str(), cfg.true_free_look_key_name.c_str());
 
     m_started = true;
     return true;
