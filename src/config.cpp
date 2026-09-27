@@ -17,20 +17,22 @@ namespace {
 using cameraunlock::config::DropRule;
 using cameraunlock::config::DroppedValue;
 using cameraunlock::config::ImportResult;
+using cameraunlock::config::LegacyFollowsDefaultsIni;
 using cameraunlock::config::LegacyInput;
 using cameraunlock::config::LegacyPoseShaping;
 using cameraunlock::config::PoseShapingValue;
-using cameraunlock::input::KeyBinding;
 using cameraunlock::input::KeyModifiers;
 
-// A legacy hotkey code and its Ctrl+Shift chord switch as one key list: the
-// code's binding when it is a key code, then the chord.
+// A legacy hotkey code and its Ctrl+Shift chord switch as one key list: what
+// core makes of the code, then the chord.
 std::string KeyList(int vk, bool chord, char letter, const char* key, std::vector<DroppedValue>& dropped) {
-    cameraunlock::config::LegacyVirtualKeyToBindings(vk, "Hotkeys", key, dropped);
-    std::vector<KeyBinding> bindings;
-    if (vk >= 0x01 && vk <= 0xFE) bindings.push_back({KeyModifiers::kNone, vk});
-    if (chord) bindings.push_back({KeyModifiers::kCtrl | KeyModifiers::kShift, letter});
-    return cameraunlock::input::FormatKeyBindings(bindings);
+    std::string list = cameraunlock::config::LegacyVirtualKeyToBindings(vk, "Hotkeys", key, dropped);
+    if (chord) {
+        const std::string chordList =
+            cameraunlock::input::FormatKeyBindings({{KeyModifiers::kCtrl | KeyModifiers::kShift, letter}});
+        list += (list.empty() ? "" : ", ") + chordList;
+    }
+    return list;
 }
 
 ImportResult Import(const LegacyInput& input, Config& out) {
@@ -82,8 +84,30 @@ ImportResult Import(const LegacyInput& input, Config& out) {
     out.cycle_tracking_mode_key_name = KeyList(c.vk_position, c.chord_position, 'G', "Position", dropped);
     out.yaw_mode_key_name = KeyList(c.vk_yaw_mode, c.chord_yaw_mode, 'H', "YawMode", dropped);
 
-    return read.status == legacy::ReadStatus::Absent ? ImportResult::Absent(std::move(dropped), std::move(shaping))
-                                                     : ImportResult::Imported(std::move(dropped), std::move(shaping));
+    // A setting the player never changed from what the dev build shipped
+    // follows Defaults.ini: the tracking mode as one unit, each hotkey with its
+    // chord switch.
+    using cameraunlock::config::schema::Concept;
+    const legacy::Config shipped;
+    LegacyFollowsDefaultsIni follows;
+    follows.Setting(Concept::UdpPort, c.udp_port, shipped.udp_port);
+    follows.Setting(Concept::EnableOnStartup, c.enabled_on_startup, shipped.enabled_on_startup);
+    follows.Setting(Concept::WorldSpaceYaw, c.world_space_yaw, shipped.world_space_yaw);
+    follows.TrackingMode(c.position_enabled, shipped.position_enabled);
+    follows.Setting(Concept::DataFreshnessMs, c.data_freshness_ms, shipped.data_freshness_ms);
+    follows.Setting(Concept::LocalSmoothing, c.local_smoothing, shipped.local_smoothing);
+    follows.Setting(Concept::RemoteSmoothing, c.remote_smoothing, shipped.remote_smoothing);
+    follows.Setting(Concept::CollisionEnabled, c.lean_collision, shipped.lean_collision);
+    follows.NotInLegacy(Concept::CollisionReleaseSmoothing);
+    follows.Setting(Concept::ToggleKey, c.vk_toggle == shipped.vk_toggle && c.chord_toggle == shipped.chord_toggle);
+    follows.Setting(Concept::CycleTrackingModeKey,
+                    c.vk_position == shipped.vk_position && c.chord_position == shipped.chord_position);
+    follows.Setting(Concept::YawModeKey,
+                    c.vk_yaw_mode == shipped.vk_yaw_mode && c.chord_yaw_mode == shipped.chord_yaw_mode);
+
+    return read.status == legacy::ReadStatus::Absent
+               ? ImportResult::Absent(std::move(dropped), std::move(shaping), follows.Concepts())
+               : ImportResult::Imported(std::move(dropped), std::move(shaping), follows.Concepts());
 }
 
 }

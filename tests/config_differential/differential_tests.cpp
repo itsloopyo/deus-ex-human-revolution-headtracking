@@ -20,7 +20,17 @@
 // bytes, its last write time and a read-only attribute, a read-only copy imports
 // as a writable one does, the folder holds nothing but the legacy file and
 // CameraUnlock.ini, and a second load reads CameraUnlock.ini, gives the same
-// settings and changes neither file. Each distinct CameraUnlock.ini the
+// settings and changes neither file.
+//
+// A row the player never changed from what dev shipped follows Defaults.ini:
+// the import lists it in follows_defaults_ini and the migration writes it
+// `default`, the tracking mode pair as one unit. The test derives the untouched
+// rows from what the import read and holds the import's list to them on every
+// input; the dev first-run output, the empty file and no file list every row
+// and migrate to the committed file byte for byte. Each input with a file also
+// migrates over a Defaults.ini that differs from the built-in values on every
+// row, where an untouched row takes Defaults.ini's value and a changed row
+// keeps the player's. Each distinct CameraUnlock.ini the
 // migration wrote goes to DXHR_MIGRATED_DIR, which lint-migrated.mjs then holds
 // to core's canonical config lint.
 //
@@ -40,6 +50,8 @@
 #include "cameraunlock/tracking/tracking_mode.h"
 
 #include <windows.h>
+
+#include <map>
 
 #include <algorithm>
 #include <array>
@@ -85,6 +97,11 @@ int g_checks = 0;
 int g_statuses[6] = {};
 // Every distinct CameraUnlock.ini the migration wrote, for the lint.
 std::set<std::string> g_migrated;
+// Inputs that left every row at dev's default, and that changed the tracking mode.
+int g_allUntouched = 0;
+int g_modeChanged = 0;
+// Hotkey codes on a modifier key alone, which N3 unbinds.
+int g_modifierCodes = 0;
 
 void Check(bool cond, const std::string& what) {
     ++g_checks;
@@ -350,7 +367,7 @@ public:
             if (e.is_regular_file()) SetFileAttributesW(e.path().c_str(), FILE_ATTRIBUTE_NORMAL);
         }
         for (const auto& e : fs::directory_iterator(root_)) {
-            if (e.path().filename() != "global") fs::remove_all(e.path());
+            if (e.path().filename() != "global" && e.path().filename() != "skewed") fs::remove_all(e.path());
         }
     }
     fs::path Fresh(const std::string& leaf) {
@@ -360,6 +377,8 @@ public:
     }
     // Outside every Fresh folder. The first load creates it with the built-in values.
     fs::path DefaultsPath() const { return root_ / "global" / "Defaults.ini"; }
+    // Where main writes kSkewedDefaults, outside every Fresh folder.
+    fs::path SkewedDefaultsPath() const { return root_ / "skewed" / "Defaults.ini"; }
 
 private:
     fs::path root_;
@@ -424,6 +443,128 @@ ConfigLoadResult<Config> LoadFolder(Scratch& scratch, const fs::path& folder) {
     cameraunlock::config::ConfigOwner<Config> owner(
         MakeOwnerOptions(folder, DefaultsFile::At(scratch.DefaultsPath().wstring())));
     return owner.Load();
+}
+
+using cameraunlock::config::schema::Concept;
+
+// The settings kSkewedDefaults gives, set in main.
+Config g_skewed;
+
+ConfigLoadResult<Config> LoadFolder(const fs::path& folder, const fs::path& defaults) {
+    cameraunlock::config::ConfigOwner<Config> owner(MakeOwnerOptions(folder, DefaultsFile::At(defaults.wstring())));
+    return owner.Load();
+}
+
+// Every row the table binds that follows Defaults.ini. CollisionMargin keeps
+// the game's own value and CameraDump is the mod's own.
+const std::set<Concept>& GlobalRows() {
+    static const std::set<Concept> rows = {
+        Concept::UdpPort,          Concept::EnableOnStartup,           Concept::WorldSpaceYaw,
+        Concept::RotationEnabled,  Concept::PositionEnabled,           Concept::DataFreshnessMs,
+        Concept::LocalSmoothing,   Concept::RemoteSmoothing,           Concept::CollisionEnabled,
+        Concept::CollisionReleaseSmoothing, Concept::ToggleKey,        Concept::CycleTrackingModeKey,
+        Concept::YawModeKey,
+    };
+    return rows;
+}
+
+// The rows the player never changed from dev's defaults, the mode pair as one
+// unit. CollisionReleaseSmoothing had no key, so no player changed it.
+std::set<Concept> UntouchedRows(const legacy::Config& l) {
+    const legacy::Config d;
+    std::set<Concept> changed;
+    if (l.udp_port != d.udp_port) changed.insert(Concept::UdpPort);
+    if (l.enabled_on_startup != d.enabled_on_startup) changed.insert(Concept::EnableOnStartup);
+    if (l.world_space_yaw != d.world_space_yaw) changed.insert(Concept::WorldSpaceYaw);
+    if (l.position_enabled != d.position_enabled) {
+        changed.insert(Concept::RotationEnabled);
+        changed.insert(Concept::PositionEnabled);
+    }
+    if (l.data_freshness_ms != d.data_freshness_ms) changed.insert(Concept::DataFreshnessMs);
+    if (!SameBits(l.local_smoothing, d.local_smoothing)) changed.insert(Concept::LocalSmoothing);
+    if (!SameBits(l.remote_smoothing, d.remote_smoothing)) changed.insert(Concept::RemoteSmoothing);
+    if (l.lean_collision != d.lean_collision) changed.insert(Concept::CollisionEnabled);
+    if (l.vk_toggle != d.vk_toggle || l.chord_toggle != d.chord_toggle) changed.insert(Concept::ToggleKey);
+    if (l.vk_position != d.vk_position || l.chord_position != d.chord_position) {
+        changed.insert(Concept::CycleTrackingModeKey);
+    }
+    if (l.vk_yaw_mode != d.vk_yaw_mode || l.chord_yaw_mode != d.chord_yaw_mode) changed.insert(Concept::YawModeKey);
+    std::set<Concept> untouched;
+    for (const Concept row : GlobalRows()) {
+        if (changed.count(row) == 0) untouched.insert(row);
+    }
+    return untouched;
+}
+
+std::string Names(const std::set<Concept>& rows) {
+    std::string text;
+    for (const Concept row : rows) {
+        text += (text.empty() ? "" : ", ") + std::string(cameraunlock::config::schema::kConcepts[static_cast<std::size_t>(row)].name);
+    }
+    return text.empty() ? "none" : text;
+}
+
+// `row`'s fields copied from `from` into `to`.
+void CopyRow(Concept row, const Config& from, Config& to) {
+    switch (row) {
+        case Concept::UdpPort: to.udp_port = from.udp_port; break;
+        case Concept::EnableOnStartup: to.enable_on_startup = from.enable_on_startup; break;
+        case Concept::WorldSpaceYaw: to.world_space_yaw = from.world_space_yaw; break;
+        case Concept::RotationEnabled: to.rotation_enabled = from.rotation_enabled; break;
+        case Concept::PositionEnabled: to.position_enabled = from.position_enabled; break;
+        case Concept::DataFreshnessMs: to.data_freshness_ms = from.data_freshness_ms; break;
+        case Concept::LocalSmoothing:
+            to.local_smoothing = from.local_smoothing;
+            to.position.local_smoothing = from.position.local_smoothing;
+            break;
+        case Concept::RemoteSmoothing:
+            to.remote_smoothing = from.remote_smoothing;
+            to.position.remote_smoothing = from.position.remote_smoothing;
+            break;
+        case Concept::CollisionEnabled: to.collision_enabled = from.collision_enabled; break;
+        case Concept::CollisionReleaseSmoothing: to.lean_clamp.release_smoothing = from.lean_clamp.release_smoothing; break;
+        case Concept::ToggleKey: to.toggle_key_name = from.toggle_key_name; break;
+        case Concept::CycleTrackingModeKey: to.cycle_tracking_mode_key_name = from.cycle_tracking_mode_key_name; break;
+        case Concept::YawModeKey: to.yaw_mode_key_name = from.yaw_mode_key_name; break;
+        default: throw std::logic_error("no fields for a row the table does not bind");
+    }
+}
+
+std::string RenderValues(const Config& c);
+
+// A Defaults.ini other than the built-in values on every row in GlobalRows,
+// the tracking mode pair taken together.
+const char* const kSkewedDefaults =
+    "[CameraUnlock]\r\nConfigFormat=1\r\n\r\n"
+    "[Network]\r\nUdpPort=5353\r\n\r\n"
+    "[General]\r\nEnableOnStartup=false\r\nWorldSpaceYaw=false\r\nRotationEnabled=false\r\nDataFreshnessMs=750\r\n\r\n"
+    "[Smoothing]\r\nLocalSmoothing=0.5\r\nRemoteSmoothing=0.45\r\n\r\n"
+    "[Position]\r\nPositionEnabled=true\r\nCollisionEnabled=false\r\nCollisionReleaseSmoothing=0.4\r\n\r\n"
+    "[Hotkeys]\r\nToggleKey=F8\r\nCycleTrackingModeKey=F9\r\nYawModeKey=F10\r\n";
+
+// The settings the skewed Defaults.ini gives every row in GlobalRows.
+Config SkewedConfig() {
+    const cameraunlock::config::CanonicalIni doc = cameraunlock::config::ParseCanonicalIni(kSkewedDefaults);
+    Config c;
+    const cameraunlock::config::ApplyReport report = cameraunlock::config::ApplyCanonical(doc, MakeConfigTable(), c);
+    if (!doc.IsReadable() || !doc.diagnostics.empty() || !report.diagnostics.empty()) {
+        throw std::logic_error("the skewed Defaults.ini draws diagnostics");
+    }
+    const Config builtin;
+    for (const Concept row : GlobalRows()) {
+        Config probe = builtin;
+        CopyRow(row, c, probe);
+        if (row == Concept::RotationEnabled || row == Concept::PositionEnabled) {
+            CopyRow(Concept::RotationEnabled, c, probe);
+            CopyRow(Concept::PositionEnabled, c, probe);
+        }
+        if (RenderValues(probe) == RenderValues(builtin)) {
+            throw std::logic_error(std::string("the skewed Defaults.ini leaves ") +
+                                   cameraunlock::config::schema::kConcepts[static_cast<std::size_t>(row)].name +
+                                   " at the built-in value");
+        }
+    }
+    return c;
 }
 
 // Every row the table binds, as the renderer writes it: two configs that
@@ -623,18 +764,56 @@ void Comparison2(Scratch& scratch, const Input& input, const ImportRun& import) 
           input.name + ": ReticleProbe dropped does not match the player's value");
     for (const DroppedValue& drop : imported.dropped) {
         Check(drop.rule == DropRule::PoseShaping || drop.rule == DropRule::Reticle ||
-                  drop.rule == DropRule::KeyCodeOutOfRange,
+                  drop.rule == DropRule::KeyCodeOutOfRange || drop.rule == DropRule::ModifierKey,
               input.name + ": unexpected drop " + cameraunlock::config::DescribeDroppedValue(drop));
     }
 
     CheckOutOfRangeDrop(l.vk_toggle, "Toggle", imported.dropped, input.name);
     CheckOutOfRangeDrop(l.vk_position, "Position", imported.dropped, input.name);
     CheckOutOfRangeDrop(l.vk_yaw_mode, "YawMode", imported.dropped, input.name);
-    const dxhr_oracle_view::FireTable before = dxhr_oracle_view::OracleFires(KeysOf(l));
+    // N3 unbinds a legacy code on a Ctrl, Shift or Alt key alone and records it;
+    // the chord stays. Apart from that the keys fire as the published build's did.
+    legacy::Config unbound = l;
+    for (auto [vk, key] : {std::pair<int*, const char*>{&unbound.vk_toggle, "Toggle"},
+                           {&unbound.vk_position, "Position"}, {&unbound.vk_yaw_mode, "YawMode"}}) {
+        const bool modifier = (*vk >= 0x10 && *vk <= 0x12) || (*vk >= 0xA0 && *vk <= 0xA5);
+        Check(modifier == (FindDrop(imported.dropped, DropRule::ModifierKey, "Hotkeys", key) != nullptr),
+              input.name + ": [Hotkeys] " + key + " dropped as a modifier key does not match its code");
+        if (modifier) {
+            *vk = 0;
+            ++g_modifierCodes;
+        }
+    }
+    const dxhr_oracle_view::FireTable before = dxhr_oracle_view::OracleFires(KeysOf(unbound));
     const dxhr_oracle_view::FireTable after = CurrentFires(m);
     Check(before == after, input.name + ": hotkeys fire differently: " + FirstFireDifference(before, after));
 
+    const std::set<Concept> follows(imported.follows_defaults_ini.begin(), imported.follows_defaults_ini.end());
+    Check(follows.size() == imported.follows_defaults_ini.size(), input.name + ": follows_defaults_ini names a row twice");
+    const std::set<Concept> untouched = UntouchedRows(l);
+    Check(follows == untouched, input.name + ": follows Defaults.ini " + Names(follows) + ", the player left " +
+                                    Names(untouched) + " untouched");
+    if (untouched == GlobalRows()) ++g_allUntouched;
+    if (untouched.count(Concept::RotationEnabled) == 0) ++g_modeChanged;
+    if (!input.bytes || input.name == "empty file" || input.name == "dev first-run output") {
+        Check(untouched == GlobalRows(), input.name + ": a file no player edited leaves a row changed");
+    }
+
     if (deferred) return;
+
+    // Over a Defaults.ini that differs everywhere, an untouched row takes its
+    // value and a changed row keeps the player's.
+    if (input.bytes) {
+        const fs::path folder = scratch.Fresh("skewed");
+        Place(folder, input);
+        const ConfigLoadResult<Config> skewed = LoadFolder(folder, scratch.SkewedDefaultsPath());
+        Check(skewed.status == ConfigLoadStatus::Migrated, input.name + ": over the skewed Defaults.ini, not Migrated");
+        Config want = m;
+        for (const Concept row : follows) CopyRow(row, g_skewed, want);
+        Check(RenderValues(skewed.config) == RenderValues(want),
+              input.name + ": over the skewed Defaults.ini, the untouched rows do not take its values or the changed "
+                           "rows lose the player's");
+    }
 
     // CameraUnlock.ini: the reader and the table find nothing to report, and the
     // next launch reads it, over the same Defaults.ini, into the same settings
@@ -647,6 +826,14 @@ void Comparison2(Scratch& scratch, const Input& input, const ImportRun& import) 
     Check(doc.IsReadable() && doc.diagnostics.empty() && report.diagnostics.empty(),
           input.name + ": CameraUnlock.ini draws diagnostics");
     g_migrated.insert(bytes);
+    for (const Concept row : follows) {
+        const std::string key = cameraunlock::config::schema::kConcepts[static_cast<std::size_t>(row)].key;
+        Check(bytes.find("\r\n" + key + "=default\r\n") != std::string::npos,
+              input.name + ": " + key + " is not written default");
+    }
+    if (!input.bytes || input.name == "empty file" || input.name == "dev first-run output") {
+        Check(bytes == ReadBytes(DXHR_COMMITTED_CONFIG), input.name + ": does not give the committed file byte for byte");
+    }
 
     const fs::file_time_type written = fs::last_write_time(file);
     const ConfigLoadResult<Config> again = LoadFolder(scratch, writable.folder);
@@ -704,6 +891,10 @@ int main() {
             Check(ReadBytes(file) == firstRun, "the oracle's first-run output differs from data/dev-first-run.ini");
         }
 
+        g_skewed = SkewedConfig();
+        fs::create_directories(scratch.SkewedDefaultsPath().parent_path());
+        WriteBytes(scratch.SkewedDefaultsPath(), kSkewedDefaults);
+
         const std::vector<Input> inputs = Inputs(firstRun);
         std::printf("comparison 1 (oracle dev 9a3d6ce against the import) on %zu inputs\n", inputs.size());
         for (const char* d : kComparison1Differences) std::printf("  recorded difference: %s\n", d);
@@ -714,6 +905,11 @@ int main() {
             scratch.Clear();
         }
         WriteMigrated();
+        std::printf("  %d inputs left every row at dev's default, %d changed the tracking mode\n", g_allUntouched,
+                    g_modeChanged);
+        Check(g_allUntouched > 0 && g_modeChanged > 0 && g_allUntouched < static_cast<int>(inputs.size()),
+              "the inputs both leave rows untouched and change them, the tracking mode among them");
+        Check(g_modifierCodes > 0, "the corpus reaches a hotkey code on a modifier key alone");
     } catch (const std::exception& e) {
         std::printf("  FAIL: threw: %s\n", e.what());
         ++g_failures;
