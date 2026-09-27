@@ -4,13 +4,6 @@
 
 An unofficial head tracking mod for Deus Ex: Human Revolution - Director's Cut that moves the view with your head while your mouse or controller keeps aiming, driven by a webcam, phone, or any OpenTrack compatible tracker, with no VR headset required.
 
-Updating from an earlier build? Settings now live in `CameraUnlock.ini` in the
-game folder. The first start reads your settings from
-`DeusExHumanRevolutionHeadTracking.ini` and writes them into `CameraUnlock.ini`,
-and never changes `DeusExHumanRevolutionHeadTracking.ini`. The tracking mode and
-yaw mode you pick in game are saved to `CameraUnlock.ini`.
-[Configuration](#configuration) lists what carries over and what does not.
-
 ## Features
 
 - **Decoupled look and aim** - head tracking moves the camera; aim stays on your mouse/controller
@@ -300,7 +293,7 @@ number it used.
 ## Updating / Uninstalling
 
 - Update: run the new version's `install.cmd` - it redeploys in place.
-- Uninstall: run `uninstall.cmd`. It removes the mod and, if we installed it, the ASI loader. It leaves `CameraUnlock.ini` and `DeusExHumanRevolutionHeadTracking.ini` in place, so a reinstall keeps your settings, and does not touch `Defaults.ini`.
+- Uninstall: run `uninstall.cmd`. It removes the mod and, if we installed it, the ASI loader. It leaves `CameraUnlock.ini` in place, so a reinstall keeps your settings, and does not touch `Defaults.ini`.
 
 ## Building from source
 
