@@ -63,11 +63,14 @@ static const uint32_t kSteamRenderReads_20260603[] = {
 // (FUN_0081c4f0) passes tan(GetFov()/2) and the aspect from FUN_00617e00
 // (= DAT_00e0523c) to FUN_0081c3a0, which divides x by the second.
 //
-// So the three values logged in play - 0.5625 walking around, 0.4316 with the
-// sights up, 0.2330 scoped - are tan(vertical/2) on a 16:9 frame, and
-// multiplying by 16/9 gives 1.00000, 0.76733 and 0.41421: horizontal fields of
-// view of exactly 90, 75 and 45 degrees. Three round numbers is what pins the
-// un-zoomed one at 90 horizontal.
+// So a tan(vertical/2) of 0.4316 on a 16:9 frame is a horizontal field of view
+// of exactly 75 degrees once multiplied by 16/9.
+//
+// The un-zoomed one is the FOV slider, `g_fov` at DAT_01c79ef4: an int in
+// horizontal degrees, registered by FUN_00a67c10 with a default of 75. With it
+// at 75 the camera renders 46.69 degrees vertical at 16:9 walking around, which
+// is 75.00 horizontal, and the iron sights narrow that by a tangent ratio of
+// 0.625. It is the player's own choice, so it is the base.
 //
 // GenericCamera's constructor sets +0x30 from DAT_00aa81e4 = pi/2, which is a
 // vertical placeholder gameplay overwrites, NOT the base. Treating it as the
@@ -93,7 +96,7 @@ static const BuildProfile kSteamProfile_20260603 = {
     0x000013F4,  // CameraManager: tan(fov/2), recomputed each frame
     0x00000050,  // camera vtable: GetFov -> vertical radians (FUN_006a9050)
     0x00A0523C,  // the engine's aspect, DAT_00e0523c (VA 0x00E0523C)
-    90.0f,       // the un-zoomed horizontal field of view
+    0x01879EF4,  // g_fov, the FOV slider (VA 0x01C79EF4), int horizontal degrees
     0x00405230,  // NsReticleMovieController::Update (vtable slot 6)
     0x00000020,  // the controller's GFx movie
     0x00404850,  // FUN_00804850 clean-aim cast -> metres

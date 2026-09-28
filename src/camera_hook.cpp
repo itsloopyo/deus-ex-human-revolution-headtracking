@@ -48,7 +48,7 @@ uint32_t         s_worldVfunc = 0;
 uint32_t         s_fovOffset = 0;
 uint32_t         s_fovVfunc = 0;
 const float*     s_aspect = nullptr;
-float            s_baseTanHalfFov = 0.0f;
+const int32_t*   s_fovSetting = nullptr;
 const uint32_t*  s_renderReads = nullptr;
 int              s_renderReadCount = 0;
 
@@ -134,8 +134,7 @@ CameraSnapshot s_clean = {};
 bool s_loggedInjecting = false;
 bool s_loggedBadBasis = false;
 bool s_loggedBadFov = false;
-bool s_loggedZoom = false;
-bool s_loggedFovBasis = false;
+int32_t s_loggedZoomBase = 0;
 
 // A transform stores its basis either along the rows (camera-to-world) or down
 // the columns (the transposed view matrix).
@@ -258,8 +257,10 @@ void HeadPositionDelta(const Basis& clean, const HeadPose& pose, float outDelta[
 // either way and the player reads the magnification as the mod's sensitivity
 // jumping the moment they aim.
 //
-// Exactly 1.0 whenever the game is at its own default FOV, which is where it
-// sits for nearly all of a session, so this changes nothing in normal play.
+// Exactly 1.0 whenever the game renders at the FOV the player set on the
+// slider, which is where it sits for nearly all of a session, so this changes
+// nothing in normal play. The slider is the base, never a fixed number: the
+// player's own FOV choice is not normalised away.
 // It is keyed to the FOV being rendered rather than to the aim state, so a
 // vision aug or a cinematic pull-in gets the same treatment as the sights.
 // GetFov answers VERTICALLY while the game's fields of view are authored
@@ -273,37 +274,41 @@ float ZoomFactor(void* camera) {
     GetFovFn getFov = *reinterpret_cast<GetFovFn*>(vtable + s_fovVfunc);
     const float fov = getFov(camera, nullptr);
     const float aspect = *s_aspect;
+    const int32_t baseDeg = *s_fovSetting;
 
-    // Both numbers come out of the running process, so this is the boundary
-    // check. An unreadable FOV means no compensation, never a guessed one.
+    // All three numbers come out of the running process, so this is the
+    // boundary check. An unreadable FOV means no compensation, never a guessed
+    // one.
     if (!std::isfinite(fov) || fov <= 0.0f || fov >= kPi ||
-        !std::isfinite(aspect) || aspect <= 0.1f || aspect >= 10.0f) {
+        !std::isfinite(aspect) || aspect <= 0.1f || aspect >= 10.0f ||
+        baseDeg <= 0 || baseDeg >= 180) {
         if (!s_loggedBadFov) {
             s_loggedBadFov = true;
             Log::Line("WARN: the camera reports a %.4f rad vertical field of view at an "
-                      "aspect of %.4f. Head tracking is not being scaled for zoom, so it "
-                      "will feel stronger through sights and scopes.",
-                      fov, aspect);
+                      "aspect of %.4f, and the FOV setting reads %d. Head tracking is not "
+                      "being scaled for zoom, so it will feel stronger through sights and "
+                      "scopes.",
+                      fov, aspect, baseDeg);
         }
         return 1.0f;
     }
 
     const float tanHalfHorizontal = std::tan(fov * 0.5f) * aspect;
-    const float factor =
-        cameraunlock::camera::FovZoomFactor(tanHalfHorizontal, s_baseTanHalfFov);
+    const float tanHalfBase = std::tan(static_cast<float>(baseDeg) * 0.5f * kDegToRad);
+    const float factor = cameraunlock::camera::FovZoomFactor(tanHalfHorizontal, tanHalfBase);
 
-    // Once, with every term on the line, because a factor that is wrong by a
-    // constant reads exactly like a factor that is right - the whole of normal
-    // play just runs at a fixed fraction of the pose, and head tracking feels
-    // weak everywhere rather than wrong anywhere. The line has to say 1.0000
-    // against the base FOV in ordinary play; anything else is this fault.
-    if (!s_loggedZoom) {
-        s_loggedZoom = true;
+    // With every term on the line, because a factor that is wrong by a constant
+    // reads exactly like a factor that is right - the whole of normal play just
+    // runs at a fixed fraction of the pose, and head tracking feels weak
+    // everywhere rather than wrong anywhere. The line has to say 1.0000 against
+    // the FOV setting in ordinary play; anything else is this fault. Once, and
+    // again whenever the player moves the slider.
+    if (baseDeg != s_loggedZoomBase) {
+        s_loggedZoomBase = baseDeg;
         Log::Line("CameraHook: field of view %.2f deg vertical at aspect %.4f = %.2f deg "
-                  "horizontal, against a %.2f deg base; head tracking scaled by %.4f",
+                  "horizontal, against the FOV setting's %d deg; head tracking scaled by %.4f",
                   fov / kDegToRad, aspect,
-                  2.0f * std::atan(tanHalfHorizontal) / kDegToRad,
-                  2.0f * std::atan(s_baseTanHalfFov) / kDegToRad, factor);
+                  2.0f * std::atan(tanHalfHorizontal) / kDegToRad, baseDeg, factor);
     }
     return factor;
 }
@@ -416,21 +421,15 @@ void* ActiveCamera(void* self) {
     return *reinterpret_cast<void**>(static_cast<uint8_t*>(self) + s_activeCameraOffset);
 }
 
-// The camera's own account of what it is rendering, logged on the first frame
-// the camera updates at all rather than on the first frame a pose arrives.
-// Without it the whole FOV basis stays invisible until a tracker is connected
-// and a save is loaded, which is the wrong moment to discover that a patch moved
-// the aspect.
+// The zoom factor's terms, logged on the first frame the camera updates at all
+// rather than on the first frame a pose arrives. Without it the whole FOV basis
+// stays invisible until a tracker is connected and a save is loaded, which is
+// the wrong moment to discover that a patch moved the aspect or the slider.
 void LogFovBasisOnce(void* cameraManager) {
-    if (s_loggedFovBasis) return;
+    if (s_loggedZoomBase != 0) return;
     void* camera = ActiveCamera(cameraManager);
     if (camera == nullptr) return;
-    s_loggedFovBasis = true;
-
-    uint8_t* vtable = *reinterpret_cast<uint8_t**>(camera);
-    GetFovFn getFov = *reinterpret_cast<GetFovFn*>(vtable + s_fovVfunc);
-    Log::Line("CameraHook: the camera reports %.2f deg vertical at aspect %.4f",
-              getFov(camera, nullptr) / kDegToRad, *s_aspect);
+    ZoomFactor(camera);
 }
 
 float* CameraField(void* camera, uint32_t offset) {
@@ -677,7 +676,8 @@ bool CameraHook::Install(const BuildProfile& profile, const Config& cfg, Trackin
     }
     s_aspect = reinterpret_cast<const float*>(
         reinterpret_cast<uintptr_t>(base) + profile.aspectRva);
-    s_baseTanHalfFov = std::tan(profile.baseHorizontalFovDeg * 0.5f * kDegToRad);
+    s_fovSetting = reinterpret_cast<const int32_t*>(
+        reinterpret_cast<uintptr_t>(base) + profile.fovSettingRva);
 
     void* target = reinterpret_cast<void*>(
         reinterpret_cast<uintptr_t>(base) + profile.cameraUpdateRva);
@@ -708,10 +708,10 @@ bool CameraHook::Install(const BuildProfile& profile, const Config& cfg, Trackin
     lean_trace::Install(profile);
 
     Log::Line("CameraHook installed: profile=%s target=%p camera+0x%X/0x%X units/m=%.2f "
-              "lean-collision=%s skin=%.2fm base-fov=%.1fdeg-horizontal diag=%d",
+              "lean-collision=%s skin=%.2fm fov-setting=%ddeg-horizontal diag=%d",
               profile.name, target, s_anglesOffset, s_worldOffset, s_unitsPerMetre,
               s_leanCollision ? "on" : "off", s_leanSkinMetres,
-              profile.baseHorizontalFovDeg, s_diag ? 1 : 0);
+              *s_fovSetting, s_diag ? 1 : 0);
     m_installed = true;
     return true;
 }

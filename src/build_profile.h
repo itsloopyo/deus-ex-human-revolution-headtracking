@@ -40,7 +40,10 @@ struct BuildProfile {
     // moves with the head.
     uint32_t cameraFovVfunc;      // camera vtable: GetFov -> vertical radians
     uint32_t aspectRva;           // the aspect the engine's own projection divides x by
-    float    baseHorizontalFovDeg;  // the game's un-zoomed horizontal field of view
+    // The FOV slider's value, g_fov: an int, in horizontal degrees. It is the
+    // un-zoomed field of view as the player set it, so it is the base the zoom
+    // is measured against, read every frame rather than once at startup.
+    uint32_t fovSettingRva;
     uint32_t reticleUpdateRva;    // NsReticleMovieController::Update
     uint32_t reticleMovieOffset;  // the GFx movie within the reticle controller
     uint32_t reticleAimRva;       // the controller's clean-aim cast, returns metres
