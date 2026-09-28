@@ -3,6 +3,8 @@
 #include "ads.h"
 #include "logging.h"
 
+#include "cameraunlock/time/qpc_clock.h"
+
 #include <windows.h>
 
 #include <chrono>
@@ -118,9 +120,10 @@ bool TrackingRuntime::SamplePerFrame(HeadPose& out) {
     }
 
     // Asked last, after every gate above has had its say, so a frame tracking
-    // stands down on never reads the sights at all.
-    const AdsLean::Pose shaped = m_adsLean.Apply(
-        SightsAreUp(), m_trueFreeLook.load(std::memory_order_relaxed), absolute, GetTickCount64());
+    // stands down on never reads the sights at all. The fade runs on QPC because
+    // GetTickCount64 steps in about 16 ms, a tenth of it.
+    const AdsLean::Pose shaped = m_adsLean.Apply(SightsAreUp(), m_trueFreeLook.load(std::memory_order_relaxed),
+                                                 absolute, cameraunlock::time::QpcNowMicros() / 1000);
 
     out.rotation_valid = rotationValid;
     out.yaw = shaped.yaw;
