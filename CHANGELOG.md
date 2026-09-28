@@ -7,19 +7,27 @@
 - Head tracking now moves the view by the same amount on screen whatever the
   game has done with its field of view. Popping out of cover, raising the
   sights and putting a scope up all zoom in, and a zoom magnifies head tracking
-  along with everything else in the frame - 1.3x at the sights and 2.4x through
-  a scope, which reads as the mod's sensitivity jumping the moment you aim. The
-  pose is now scaled by the ratio between the field of view being rendered and
-  the game's own 90 degree walking-around one, so a head movement carries the
-  view as far zoomed in as it does zoomed out. Head tilt is left alone, because
-  a tilt rotates the picture rather than moving it and looks the same at any
-  zoom. There is nothing to configure and the scaling is exactly 1.0 whenever
-  the game is not zoomed.
+  along with everything else in the frame - 1.6x at the iron sights with the
+  field of view slider at its default 75 - which reads as the mod's sensitivity
+  jumping the moment you aim. The pose is now scaled by the ratio between the
+  field of view being rendered and the one set on the game's field of view
+  slider, read every frame, so a head movement carries the view as far zoomed
+  in as it does zoomed out. Head tilt is left alone, because a tilt rotates the
+  picture rather than moving it and looks the same at any zoom. There is
+  nothing to configure. The line `HeadTracking.log` writes about it at the
+  start, and again when the slider moves, reads 1.0000 while the game renders
+  at the slider's field of view.
 
 - Head tracking stays on while you aim down sights. Rotation carries straight
-  on, and the lean eases out over 150ms as the sights come up and back in over
-  250ms as they come down, since a lean moves the eye off the sight line.
-  There is no setting and no key for it.
+  on, and by default the lean eases out over 150ms as the sights come up and
+  back in over 250ms as they come down, since a lean moves the eye off the
+  sight line.
+- True free look, `[Position] TrueFreeLook`, off by default: the lean stays on
+  while you aim, so the weapon stays put and your head moves around it.
+  `Insert` / `Ctrl+Shift+U` (`[Hotkeys] TrueFreeLookKey`) switches it in game,
+  and switching with the sights up eases the lean in or out rather than
+  stepping it. The mod saves the new value to `CameraUnlock.ini` straight away,
+  so it comes back at the next start.
 - Lean collision, on by default. The eye is held off walls, doors and cover
   instead of passing through them: before the lean is added to the camera the
   mod asks the game's own collision world what stands between the eye and where
@@ -64,11 +72,11 @@
 - Deleting only `CameraUnlock.ini` makes the next start read `DeusExHumanRevolutionHeadTracking.ini` again. To go back to the defaults, replace everything in `CameraUnlock.ini` with the defaults the README shows. Every setting they set to `default` then follows `Defaults.ini`.
 - Hotkeys are written as key names, and each hotkey lists every key that triggers it, the Ctrl+Shift chord included: `ToggleKey=End, Ctrl+Shift+Y`.
 - Keys that moved or were renamed, each carried over with its value: `[General] Port` is `[Network] UdpPort`; `[General] PositionEnabled` is `[Position] PositionEnabled`, beside a new `[General] RotationEnabled`, and the two together are the tracking mode the game starts in; `[General] LeanCollision` is `[Position] CollisionEnabled`; `[General] LeanCollisionSkin` is `[Position] CollisionMargin`, still in metres; `[General] CameraDump` is `[Diagnostics] CameraDump`; `[Hotkeys] Toggle` and `ChordToggle` are `ToggleKey`, `Position` and `ChordPosition` are `CycleTrackingModeKey`, and `YawMode` and `ChordYawMode` are `YawModeKey`.
-- The tracking mode (`PageUp` / `Ctrl+Shift+G`) and the yaw mode (`PageDown` / `Ctrl+Shift+H`) are now saved to `CameraUnlock.ini` when you change them, and the game starts in them next time. `End` still changes the current session only: whether tracking is on when the game starts is `EnableOnStartup`.
+- The tracking mode (`PageUp` / `Ctrl+Shift+G`), the yaw mode (`PageDown` / `Ctrl+Shift+H`) and true free look (`Insert` / `Ctrl+Shift+U`) are now saved to `CameraUnlock.ini` when you change them, and the game starts in them next time. `End` still changes the current session only: whether tracking is on when the game starts is `EnableOnStartup`.
 - A `DeusExHumanRevolutionHeadTracking.ini` whose `Port` is outside 1024-65535 is not imported and the mod still does not start, as before. Fix the value and the next start imports the file.
 - A `DeusExHumanRevolutionHeadTracking.ini` whose `DataFreshnessMs` is below 1, which kept tracking from ever running, is not imported, because `CameraUnlock.ini` takes 1 or more. No `CameraUnlock.ini` is created, the mod runs on the old file's settings as before and saves nothing, and the first start after the value is 1 or more imports it.
 - When the mod cannot create `CameraUnlock.ini`, for example in a folder it cannot write to, it now starts anyway, on the settings it read from `DeusExHumanRevolutionHeadTracking.ini` or on the defaults where there is no such file, saves nothing that session, and says so in `HeadTracking.log`. Earlier versions, finding no config file and unable to create one, stopped without starting tracking.
-- The aim-down-sights mode cycle retired earlier in this release no longer reads its settings: `[General] AdsMode`, `[Hotkeys] Ads` and `[Hotkeys] ChordAds` are ignored and not carried over, and `Insert` / `Ctrl+Shift+U` do nothing. Head tracking stays on through the aim (15eeb54).
+- The aim-down-sights mode cycle retired earlier in this release no longer reads its settings: `[General] AdsMode`, `[Hotkeys] Ads` and `[Hotkeys] ChordAds` are ignored and not carried over, and `Insert` / `Ctrl+Shift+U` now switch true free look. Head tracking stays on through the aim (15eeb54).
 
 ### Fixed
 
