@@ -106,6 +106,7 @@ Two equivalent binding sets - use whichever your keyboard has:
 | Toggle tracking     | `End`       | `Ctrl+Shift+Y`  |
 | Cycle tracking mode | `Page Up`   | `Ctrl+Shift+G`  |
 | Toggle yaw mode (world / local) | `Page Down` | `Ctrl+Shift+H` |
+| Toggle true free look | `Insert`    | `Ctrl+Shift+U` |
 
 `Page Up` / `Ctrl+Shift+G` cycles tracking mode:
 
@@ -114,10 +115,10 @@ Two equivalent binding sets - use whichever your keyboard has:
 3. Rotational tracking disabled, positional tracking enabled
 4. Back to normal
 
-The tracking mode and the yaw mode are saved to `CameraUnlock.ini` as you change
-them, and the game starts in them next time. `End` turns tracking on or off for
-the current session only; `EnableOnStartup` in `CameraUnlock.ini` decides whether
-tracking is on when the game starts.
+The tracking mode, the yaw mode and true free look are saved to
+`CameraUnlock.ini` as you change them, and the game starts in them next time.
+`End` turns tracking on or off for the current session only; `EnableOnStartup`
+in `CameraUnlock.ini` decides whether tracking is on when the game starts.
 
 Each action lists its keys in the `[Hotkeys]` section of `CameraUnlock.ini`, the
 chord included, so you can rebind or remove either: `ToggleKey=End, Ctrl+Shift+Y`.
@@ -131,8 +132,18 @@ controller points it, so with your head turned it sits off to one side with its
 sights still lined up, and your rounds land where those sights point. Head
 movement is scaled to the zoom, so a scope does not magnify it.
 
+By default leaning never takes your eye off the sights. `Insert` /
+`Ctrl+Shift+U` switches to **true free look**: the weapon stays put and your
+head moves freely around it, so to see down the sights you have to put your head
+behind them, as you would in VR. It is hard, and it is off by default. The mod
+saves the mode you pick, so it holds the next time you start the game.
+
 Leaning eases out while the sights are up, because it would move your eye off
 them.
+
+`Ctrl+Shift+U` includes `U`, which the game's control settings can bind to the
+objectives screen. If the chord opens it for you, use `Insert`, or change
+`TrueFreeLookKey` in `CameraUnlock.ini`.
 
 ## Configuration
 
@@ -155,11 +166,13 @@ The built-in value of each setting set to `default` below:
 - `LocalSmoothing=0.0`
 - `RemoteSmoothing=0.15`
 - `PositionEnabled=true`
+- `TrueFreeLook=false`
 - `CollisionEnabled=true`
 - `CollisionReleaseSmoothing=0.9`
 - `ToggleKey=End, Ctrl+Shift+Y`
 - `CycleTrackingModeKey=PageUp, Ctrl+Shift+G`
 - `YawModeKey=PageDown, Ctrl+Shift+H`
+- `TrueFreeLookKey=Insert, Ctrl+Shift+U`
 
 With every setting at its default, the file reads:
 
@@ -205,6 +218,9 @@ RemoteSmoothing=default
 ; true: moving your head moves the view.
 ; Tracking mode at startup, with RotationEnabled. The mode hotkey changes both.
 PositionEnabled=default
+; false: while you aim down the sights, leaning keeps your eye on the sights.
+; true: the weapon stays put and your head moves freely around it (true free look).
+TrueFreeLook=default
 ; true: leaning stops at walls instead of moving the view through them.
 CollisionEnabled=default
 ; How far, in metres, the view is held off a wall when you lean into it.
@@ -221,6 +237,8 @@ ToggleKey=default
 CycleTrackingModeKey=default
 ; Switches yaw between the world's up axis and the camera's own (WorldSpaceYaw).
 YawModeKey=default
+; Switches between keeping your eye on the sights and true free look (TrueFreeLook).
+TrueFreeLookKey=default
 
 [Diagnostics]
 ; true: write camera and reticle diagnostics to HeadTracking.log, for troubleshooting.
@@ -273,6 +291,7 @@ number it used.
 - **View drifts:** centre it in your tracker app. The mod applies whatever pose the tracker sends, so the tracker owns the centre.
 - **Yaw feels wrong when looking up or down at extreme angles:** try toggling between world-locked and camera-local yaw with `Page Down` (or `Ctrl+Shift+H`). World-locked (default) is horizon-stable; camera-local follows the camera's current up-axis.
 - **The weapon is off to one side when I aim down sights:** your head is turned: the weapon stays on your aim and you are looking past it. Turn back to it, or move your aim to where you are looking.
+- **I can't see down the sights, they are misaligned:** you are in true free look and your head is leaned off them. Move your head back behind them, or press `Insert` / `Ctrl+Shift+U` to return to sights locked.
 - **A wall opens into a polygonal cutaway when you press into it:** the eye is inside the camera's near clip plane, where geometry stops being drawn. Raise `CollisionMargin`. The mod already holds the eye clear of the plane it reads from the frame, so if this happens at the default, send the `lean-trace` line from `HeadTracking.log` - it names the near plane that frame was built with.
 - **Leaning still goes through walls:** search `HeadTracking.log` for `lean-trace`. A line saying the lean is running unclamped names what the mod could not read - until that clears the clamp cannot run, and the lean is applied whole. `CollisionEnabled=false` in `CameraUnlock.ini` has the same effect deliberately.
 

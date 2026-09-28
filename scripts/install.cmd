@@ -22,7 +22,7 @@ set "ASI_LOADER_NAME=winmm.dll"
 :: whatever the user tuned. Listing an .ini in MOD_DLLS instead puts it through
 :: the unconditional copy and resets every key on every update.
 set "MOD_SEED_FILES="
-set "MOD_CONTROLS=Controls (nav cluster / chord):&echo   End      / Ctrl+Shift+Y  Toggle tracking&echo   PageUp   / Ctrl+Shift+G  Cycle tracking mode&echo   PageDown / Ctrl+Shift+H  Toggle yaw mode"
+set "MOD_CONTROLS=Controls (nav cluster / chord):&echo   End      / Ctrl+Shift+Y  Toggle tracking&echo   PageUp   / Ctrl+Shift+G  Cycle tracking mode&echo   PageDown / Ctrl+Shift+H  Toggle yaw mode&echo   Insert   / Ctrl+Shift+U  Toggle true free look"
 :: Not used by this mod. Set blank so a value another mod's wrapper left in
 :: the same console does not reach the body.
 set "ASI_SUBDIR="

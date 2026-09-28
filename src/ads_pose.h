@@ -10,12 +10,13 @@ namespace DeusExHumanRevolutionHeadTracking {
 // Raising the sights puts the weapon's sight line through the eye, and head
 // rotation turns the view about that same eye, so the sights stay lined up with
 // the head turned and rotation passes through untouched. A lean translates the
-// eye off that line. The camera is the only thing this mod can move (nothing
-// found in the game carries the camera, the arms and the weapon together, and
-// the mod owns no weapon pass), so in sights locked the lean is scaled by core's
-// AdsFade: 150ms out, 250ms back, a reversal continuing from where the
-// transition is. In true free look the lean stays in full and the eye moves off
-// the sights on purpose. Flipping the mode mid-aim rides the same fade.
+// eye off that line. The weapon is posed from the player's own position, which
+// the game integrates as the character moves, so there is no per-frame rig to
+// carry the lean on, and the mod owns no weapon pass. So in sights locked the
+// lean is scaled by core's AdsFade: 150ms out, 250ms back, a reversal
+// continuing from where the transition is. In true free look the lean stays in
+// full and the eye moves off the sights on purpose. Flipping the mode mid-aim
+// rides the same fade.
 //
 // Separate from TrackingRuntime because it is decidable without a socket, a
 // camera or a game, which is what lets the tests drive it frame by frame.
