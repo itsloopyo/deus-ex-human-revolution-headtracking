@@ -15,12 +15,14 @@
 // it may find is kComparison1Differences below.
 //
 // Comparison 2, import against migration, on every input: the same, where the
-// only differences allowed are the approved drops the import records, and the
-// deferral kUnrepresentable describes. Also asserted: the legacy file keeps its
-// bytes, its last write time and a read-only attribute, a read-only copy imports
-// as a writable one does, the folder holds nothing but the legacy file and
-// CameraUnlock.ini, and a second load reads CameraUnlock.ini, gives the same
-// settings and changes neither file.
+// only differences allowed are the approved drops the import records. A
+// DataFreshnessMs below 1, which the published build read with no range and
+// which left tracking permanently stale, is clamped to 1 (N4) and recorded.
+// Also asserted: the legacy file keeps its bytes, its last write time and a
+// read-only attribute, a read-only copy imports as a writable one does, the
+// folder holds nothing but the legacy file and CameraUnlock.ini, and a second
+// load reads CameraUnlock.ini, gives the same settings and changes neither
+// file.
 //
 // A row the player never changed from what dev shipped follows Defaults.ini:
 // the import lists it in follows_defaults_ini and the migration writes it
@@ -30,9 +32,12 @@
 // and migrate to the committed file byte for byte. Each input with a file also
 // migrates over a Defaults.ini that differs from the built-in values on every
 // row, where an untouched row takes Defaults.ini's value and a changed row
-// keeps the player's. Each distinct CameraUnlock.ini the
-// migration wrote goes to DXHR_MIGRATED_DIR, which lint-migrated.mjs then holds
-// to core's canonical config lint.
+// keeps the player's. The published build had no true free look, so
+// TrueFreeLook and TrueFreeLookKey follow Defaults.ini, except that where an
+// action the import keeps is on Insert the key list is written as Ctrl+Shift+U
+// alone, so Insert fires only what it fired before. Each distinct
+// CameraUnlock.ini the migration wrote goes to DXHR_MIGRATED_DIR, which
+// lint-migrated.mjs then holds to core's canonical config lint.
 //
 // The key presses go through the published build's own Hotkeys::Start and the
 // guards it compiled (OracleFires), and through the guard the current build
@@ -82,14 +87,10 @@ const char* const kComparison1Differences[] = {
     "[General] AdsMode, [Hotkeys] Ads, [Hotkeys] ChordAds: read by dev (9a3d6ce), not read since 15eeb54",
 };
 
-// Comparison 2's one departure from the rules. The published build read
-// [General] DataFreshnessMs with no range, and a value below 1 (0 included,
-// which is what text that is not a number reads as) left tracking permanently
-// stale. The canonical row takes 1 to 2147483647 and core has no rule for a
-// value outside it, so the owner defers such a file: CameraUnlock.ini is not
-// created, the session runs on what the import read, and nothing is saved.
-const char* const kUnrepresentable =
-    "[General] DataFreshnessMs below 1: not representable in the canonical row, so the conversion defers";
+// The canonical DataFreshnessMs row takes 1 to 2147483647. The published build
+// read the key with no range, and text that is not a number reads as 0, so a
+// value below 1 is clamped to 1 (N4).
+constexpr int kMinDataFreshnessMs = 1;
 
 int g_failures = 0;
 int g_checks = 0;
@@ -102,6 +103,10 @@ int g_allUntouched = 0;
 int g_modeChanged = 0;
 // Hotkey codes on a modifier key alone, which N3 unbinds.
 int g_modifierCodes = 0;
+// Inputs whose DataFreshnessMs N4 clamped.
+int g_clamped = 0;
+// Migrations whose true free look key list is Ctrl+Shift+U alone, an action having Insert.
+int g_insertKept = 0;
 
 void Check(bool cond, const std::string& what) {
     ++g_checks;
@@ -468,9 +473,15 @@ const std::set<Concept>& GlobalRows() {
     return rows;
 }
 
+// An action the import keeps is on Insert, the key true free look takes.
+bool KeepsInsert(const legacy::Config& l) {
+    return l.vk_toggle == VK_INSERT || l.vk_position == VK_INSERT || l.vk_yaw_mode == VK_INSERT;
+}
+
 // The rows the player never changed from dev's defaults, the mode pair as one
 // unit. CollisionReleaseSmoothing, TrueFreeLook and TrueFreeLookKey had no key,
-// so no player changed them.
+// so no player changed them; TrueFreeLookKey is written out where an action the
+// import keeps has Insert (KeepsInsert).
 std::set<Concept> UntouchedRows(const legacy::Config& l) {
     const legacy::Config d;
     std::set<Concept> changed;
@@ -490,6 +501,7 @@ std::set<Concept> UntouchedRows(const legacy::Config& l) {
         changed.insert(Concept::CycleTrackingModeKey);
     }
     if (l.vk_yaw_mode != d.vk_yaw_mode || l.chord_yaw_mode != d.chord_yaw_mode) changed.insert(Concept::YawModeKey);
+    if (KeepsInsert(l)) changed.insert(Concept::TrueFreeLookKey);
     std::set<Concept> untouched;
     for (const Concept row : GlobalRows()) {
         if (changed.count(row) == 0) untouched.insert(row);
@@ -578,15 +590,7 @@ std::string RenderValues(const Config& c) {
                                                  cameraunlock::config::RenderHeader{kConfigDisplayName});
 }
 
-// RenderValues for two configs, one of which may hold the DataFreshnessMs the
-// renderer refuses (kUnrepresentable): that field is compared on its own, and
-// every other row by rendering.
-bool SameSettings(const Config& a, const Config& b) {
-    Config x = a, y = b;
-    if (x.data_freshness_ms != y.data_freshness_ms) return false;
-    x.data_freshness_ms = y.data_freshness_ms = 1;
-    return RenderValues(x) == RenderValues(y);
-}
+bool SameSettings(const Config& a, const Config& b) { return RenderValues(a) == RenderValues(b); }
 
 struct FileState {
     std::string bytes;
@@ -698,7 +702,6 @@ void Comparison2(Scratch& scratch, const Input& input, const ImportRun& import) 
         }
     }
 
-    bool deferred = false;
     if (!input.bytes) {
         Check(loaded.status == ConfigLoadStatus::Created, input.name + ": no file is not Created");
         Check(writable.files == std::vector<std::string>{kConfigFileName},
@@ -707,13 +710,6 @@ void Comparison2(Scratch& scratch, const Input& input, const ImportRun& import) 
         Check(loaded.status == ConfigLoadStatus::LegacyRefused, input.name + ": a refused file is not LegacyRefused");
         Check(writable.files == legacyOnly, input.name + ": a refused import created a file");
         return;
-    } else if (import.config.data_freshness_ms < 1) {
-        // The session runs on the Config the deferral hands back, so everything
-        // below up to the CameraUnlock.ini checks applies to it too.
-        Check(loaded.status == ConfigLoadStatus::Deferred, input.name + ": " + kUnrepresentable + ", not deferred");
-        Check(writable.files == legacyOnly, input.name + ": a deferred import created a file");
-        if (loaded.status != ConfigLoadStatus::Deferred) return;
-        deferred = true;
     } else {
         Check(loaded.status == ConfigLoadStatus::Migrated,
               input.name + ": not Migrated but " + cameraunlock::config::ConfigLoadStatusName(loaded.status) + ": " +
@@ -727,7 +723,7 @@ void Comparison2(Scratch& scratch, const Input& input, const ImportRun& import) 
     std::vector<std::string> d;
     if (m.enable_on_startup != l.enabled_on_startup) d.push_back("EnableOnStartup");
     if (m.udp_port != l.udp_port) d.push_back("UdpPort");
-    if (m.data_freshness_ms != l.data_freshness_ms) d.push_back("DataFreshnessMs");
+    if (m.data_freshness_ms != std::max(l.data_freshness_ms, kMinDataFreshnessMs)) d.push_back("DataFreshnessMs");
     if (m.world_space_yaw != l.world_space_yaw) d.push_back("WorldSpaceYaw");
     const auto mode = cameraunlock::DecodeTrackingMode(m.rotation_enabled, m.position_enabled);
     if (!mode || *mode != (l.position_enabled ? cameraunlock::TrackingMode::RotationAndPosition
@@ -750,8 +746,13 @@ void Comparison2(Scratch& scratch, const Input& input, const ImportRun& import) 
     }
     if (m.camera_dump != l.camera_dump) d.push_back("CameraDump");
     // The published build had no true free look: the lean stays eased out
-    // through the aim, as it was, and the toggle takes core's keys.
+    // through the aim, as it was, and the toggle takes core's keys, or only
+    // Ctrl+Shift+U where an action the import keeps has Insert.
     if (m.true_free_look) d.push_back("TrueFreeLook");
+    const std::string freeLookKey = KeepsInsert(l) ? "Ctrl+Shift+U" : "Insert, Ctrl+Shift+U";
+    if (m.true_free_look_key_name != freeLookKey) {
+        d.push_back("TrueFreeLookKey=" + m.true_free_look_key_name + ", not " + freeLookKey);
+    }
     Check(d.empty(), input.name + ": migration differs from the import: " + Join(d));
 
     // The running mod keeps the processor's identity sensitivity, inversion and
@@ -771,9 +772,16 @@ void Comparison2(Scratch& scratch, const Input& input, const ImportRun& import) 
           input.name + ": ReticleProbe dropped does not match the player's value");
     for (const DroppedValue& drop : imported.dropped) {
         Check(drop.rule == DropRule::PoseShaping || drop.rule == DropRule::Reticle ||
-                  drop.rule == DropRule::KeyCodeOutOfRange || drop.rule == DropRule::ModifierKey,
+                  drop.rule == DropRule::KeyCodeOutOfRange || drop.rule == DropRule::ModifierKey ||
+                  drop.rule == DropRule::NumberOutOfRange,
               input.name + ": unexpected drop " + cameraunlock::config::DescribeDroppedValue(drop));
     }
+    const DroppedValue* clamped = FindDrop(imported.dropped, DropRule::NumberOutOfRange, "General", "DataFreshnessMs");
+    Check((clamped != nullptr) == (l.data_freshness_ms < kMinDataFreshnessMs),
+          input.name + ": DataFreshnessMs clamped does not match its value");
+    Check(clamped == nullptr || clamped->value == std::to_string(l.data_freshness_ms),
+          input.name + ": the clamp does not record the value read");
+    if (clamped) ++g_clamped;
 
     CheckOutOfRangeDrop(l.vk_toggle, "Toggle", imported.dropped, input.name);
     CheckOutOfRangeDrop(l.vk_position, "Position", imported.dropped, input.name);
@@ -806,8 +814,6 @@ void Comparison2(Scratch& scratch, const Input& input, const ImportRun& import) 
         Check(untouched == GlobalRows(), input.name + ": a file no player edited leaves a row changed");
     }
 
-    if (deferred) return;
-
     // Over a Defaults.ini that differs everywhere, an untouched row takes its
     // value and a changed row keeps the player's.
     if (input.bytes) {
@@ -833,6 +839,11 @@ void Comparison2(Scratch& scratch, const Input& input, const ImportRun& import) 
     Check(doc.IsReadable() && doc.diagnostics.empty() && report.diagnostics.empty(),
           input.name + ": CameraUnlock.ini draws diagnostics");
     g_migrated.insert(bytes);
+    if (KeepsInsert(l)) {
+        Check(bytes.find("\r\nTrueFreeLookKey=Ctrl+Shift+U\r\n") != std::string::npos,
+              input.name + ": an action on Insert leaves TrueFreeLookKey more than Ctrl+Shift+U");
+        ++g_insertKept;
+    }
     for (const Concept row : follows) {
         const std::string key = cameraunlock::config::schema::kConcepts[static_cast<std::size_t>(row)].key;
         Check(bytes.find("\r\n" + key + "=default\r\n") != std::string::npos,
@@ -875,6 +886,26 @@ std::vector<Input> Inputs(const std::string& firstRun) {
     inputs.push_back({"no file", std::nullopt});
     inputs.push_back({"empty file", std::string()});
     inputs.push_back({"dev first-run output", firstRun});
+    const auto replaced = [&firstRun](const std::string& from, const std::string& to) {
+        const std::size_t at = firstRun.find(from);
+        if (at == std::string::npos) throw std::runtime_error("the first-run output has no line " + from);
+        std::string bytes = firstRun;
+        bytes.replace(at, from.size(), to);
+        return bytes;
+    };
+    // DataFreshnessMs below 1, clamped (N4), and the end of the range, which is not.
+    for (const std::string value : {"0", "-5", "1"}) {
+        inputs.push_back({"DataFreshnessMs=" + value,
+                          replaced("\r\nDataFreshnessMs=500\r\n", "\r\nDataFreshnessMs=" + value + "\r\n")});
+    }
+    // An action on Insert, which true free look then leaves to it.
+    for (const std::string key : {"Toggle", "Position", "YawMode"}) {
+        const std::size_t at = firstRun.find("\r\n" + key + "=0x");
+        if (at == std::string::npos) throw std::runtime_error("the first-run output has no " + key + " code");
+        std::string bytes = firstRun;
+        bytes.replace(at + 2 + key.size() + 1, 4, "0x2D");
+        inputs.push_back({"dev first-run with " + key + "=0x2D", std::move(bytes)});
+    }
     for (auto& m : GenerateIniMutations(firstRun, legacy::ReadKeys(), MutationKeys())) {
         inputs.push_back({"corpus: " + m.name, std::move(m.bytes)});
     }
@@ -906,7 +937,6 @@ int main() {
         std::printf("comparison 1 (oracle dev 9a3d6ce against the import) on %zu inputs\n", inputs.size());
         for (const char* d : kComparison1Differences) std::printf("  recorded difference: %s\n", d);
         std::printf("comparison 2 (the import against the migration)\n");
-        std::printf("  recorded departure: %s\n", kUnrepresentable);
         for (const Input& input : inputs) {
             Comparison2(scratch, input, Comparison1(scratch, input));
             scratch.Clear();
@@ -917,6 +947,10 @@ int main() {
         Check(g_allUntouched > 0 && g_modeChanged > 0 && g_allUntouched < static_cast<int>(inputs.size()),
               "the inputs both leave rows untouched and change them, the tracking mode among them");
         Check(g_modifierCodes > 0, "the corpus reaches a hotkey code on a modifier key alone");
+        std::printf("  %d with DataFreshnessMs below 1 clamped to 1 (N4)\n", g_clamped);
+        std::printf("  %d with an action on Insert and true free look on Ctrl+Shift+U alone\n", g_insertKept);
+        Check(g_clamped >= 2, "the inputs below 1 do not each clamp DataFreshnessMs");
+        Check(g_insertKept >= 3, "the Insert inputs do not each keep Insert off true free look");
     } catch (const std::exception& e) {
         std::printf("  FAIL: threw: %s\n", e.what());
         ++g_failures;

@@ -21,6 +21,7 @@ using cameraunlock::config::LegacyFollowsDefaultsIni;
 using cameraunlock::config::LegacyInput;
 using cameraunlock::config::LegacyPoseShaping;
 using cameraunlock::config::PoseShapingValue;
+using cameraunlock::config::schema::Concept;
 using cameraunlock::input::KeyModifiers;
 
 // A legacy hotkey code and its Ctrl+Shift chord switch as one key list: what
@@ -35,6 +36,15 @@ std::string KeyList(int vk, bool chord, char letter, const char* key, std::vecto
     return list;
 }
 
+constexpr int kVkInsert = 0x2D;
+
+// The published build had no true free look. Where it put one of the three
+// actions the import keeps on Insert, that action keeps Insert and true free
+// look takes only its chord, so Insert fires what it fired before.
+bool InsertTaken(const legacy::Config& c) {
+    return c.vk_toggle == kVkInsert || c.vk_position == kVkInsert || c.vk_yaw_mode == kVkInsert;
+}
+
 ImportResult Import(const LegacyInput& input, Config& out) {
     legacy::Config c;
     const legacy::ReadResult read = c.Read(input.ansi_path.c_str());
@@ -47,7 +57,10 @@ ImportResult Import(const LegacyInput& input, Config& out) {
 
     out.enable_on_startup = c.enabled_on_startup;
     out.udp_port = c.udp_port;
-    out.data_freshness_ms = c.data_freshness_ms;
+    // The published build read DataFreshnessMs with no range, and a value below
+    // 1 left tracking permanently stale (N4).
+    out.data_freshness_ms = cameraunlock::config::LegacyClampToRange<Concept::DataFreshnessMs>(
+        c.data_freshness_ms, "General", "DataFreshnessMs", dropped);
     out.world_space_yaw = c.world_space_yaw;
 
     // [General] PositionEnabled chose only the startup mode: the cycle key
@@ -83,11 +96,15 @@ ImportResult Import(const LegacyInput& input, Config& out) {
     out.toggle_key_name = KeyList(c.vk_toggle, c.chord_toggle, 'Y', "Toggle", dropped);
     out.cycle_tracking_mode_key_name = KeyList(c.vk_position, c.chord_position, 'G', "Position", dropped);
     out.yaw_mode_key_name = KeyList(c.vk_yaw_mode, c.chord_yaw_mode, 'H', "YawMode", dropped);
+    if (InsertTaken(c)) {
+        out.true_free_look_key_name =
+            cameraunlock::input::FormatKeyBindings({{KeyModifiers::kCtrl | KeyModifiers::kShift, 'U'}});
+    }
 
     // A setting the player never changed from what the dev build shipped
     // follows Defaults.ini: the tracking mode as one unit, each hotkey with its
-    // chord switch.
-    using cameraunlock::config::schema::Concept;
+    // chord switch. DataFreshnessMs is compared as read, so one N4 clamped is
+    // the player's.
     const legacy::Config shipped;
     LegacyFollowsDefaultsIni follows;
     follows.Setting(Concept::UdpPort, c.udp_port, shipped.udp_port);
@@ -100,7 +117,7 @@ ImportResult Import(const LegacyInput& input, Config& out) {
     follows.Setting(Concept::CollisionEnabled, c.lean_collision, shipped.lean_collision);
     follows.NotInLegacy(Concept::CollisionReleaseSmoothing);
     follows.NotInLegacy(Concept::TrueFreeLook);
-    follows.NotInLegacy(Concept::TrueFreeLookKey);
+    follows.Setting(Concept::TrueFreeLookKey, !InsertTaken(c));
     follows.Setting(Concept::ToggleKey, c.vk_toggle == shipped.vk_toggle && c.chord_toggle == shipped.chord_toggle);
     follows.Setting(Concept::CycleTrackingModeKey,
                     c.vk_position == shipped.vk_position && c.chord_position == shipped.chord_position);
