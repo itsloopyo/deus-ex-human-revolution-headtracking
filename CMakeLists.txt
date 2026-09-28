@@ -135,6 +135,7 @@ if(DXHR_BUILD_TESTS)
         target_compile_options(dxhr_config_differential_tests PRIVATE /W4 /WX /permissive-)
     endif()
     add_test(NAME config_differential COMMAND dxhr_config_differential_tests)
+    set_tests_properties(config_differential PROPERTIES LABELS differential)
 
     # The committed config against the table, the fresh-equals-upgrade check and
     # the owner's saves. `--render-config <path>` makes it write the committed

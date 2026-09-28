@@ -102,6 +102,18 @@ if (git -C $ProjectRoot tag --list $tag) {
 
 Write-Host "Releasing $current -> $target" -ForegroundColor Cyan
 
+Write-Host "Running the full test suite..." -ForegroundColor Cyan
+Push-Location $ProjectRoot
+try {
+    pixi run test
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Error: pixi run test failed. Nothing was changed." -ForegroundColor Red
+        exit 1
+    }
+} finally {
+    Pop-Location
+}
+
 # --- 3. Changelog --------------------------------------------------------
 # This is the gate that aborts when there are no user-facing commits, so run
 # it BEFORE mutating any version files or building - a failure here then

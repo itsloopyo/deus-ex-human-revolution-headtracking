@@ -18,7 +18,7 @@ assets extracted from the game, and no game data files.
 | MemoryModule | `5f83e41` (inside Ultimate ASI Loader v9.7.2) | MPL-2.0 | Compiled into the vendored dinput8.dll |
 | d3d8to9 | `65870f2` (inside Ultimate ASI Loader v9.7.2) | BSD-2-Clause | Compiled into the vendored dinput8.dll |
 | MinHook | v1.3.4 | BSD-2-Clause | Compiled into `DeusExHumanRevolutionHeadTracking.asi` |
-| cameraunlock-core | ac271752d8fcf37e793b70744aa8eb12588d91ea | MIT | Compiled into `DeusExHumanRevolutionHeadTracking.asi` |
+| cameraunlock-core | a03c24290fae3a9c61f67adcb7c5ba4eedf69f20 | MIT | Compiled into `DeusExHumanRevolutionHeadTracking.asi` |
 | OpenTrack | n/a | ISC | Not bundled; UDP protocol interoperability only |
 
 ---
@@ -731,7 +731,7 @@ Git submodule at `cameraunlock-core/`, compiled into
 `DeusExHumanRevolutionHeadTracking.asi`. Our own code, MIT licensed, reproduced
 here so the notices are complete.
 
-- Pinned commit: `ac271752d8fcf37e793b70744aa8eb12588d91ea`
+- Pinned commit: `a03c24290fae3a9c61f67adcb7c5ba4eedf69f20`
 
 ```
 MIT License

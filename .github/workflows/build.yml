@@ -14,6 +14,13 @@ on:
       - 'docs/**'
       - 'LICENSE'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build and Validate
@@ -77,15 +84,6 @@ jobs:
           }
           if ($missing) {
             Write-Host "::error::Some build outputs are missing"
-            exit 1
-          }
-
-      - name: Run unit tests
-        shell: pwsh
-        run: |
-          pixi run test
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "::error::Unit tests failed"
             exit 1
           }
 
