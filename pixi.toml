@@ -33,6 +33,7 @@ uninstall = "scripts\\uninstall.cmd"
 
 # Package release ZIPs (installer + nexus).
 package = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1", depends-on = ["build-release", "test"] }
+validate-manifest = "node cameraunlock-core/scripts/validate-manifest.mjs"
 
 # Build and run the native unit tests: the frozen config reader's sanitization, the
 # ADS lean easing, and the config differential test against the published build.

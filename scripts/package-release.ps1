@@ -70,6 +70,21 @@ foreach ($s in @('install.cmd', 'uninstall.cmd')) {
 # find-game.ps1 actually looks in.
 Copy-SharedBundle -StagingDir $ghStaging
 
+# The launcher reads launcher-manifest.json from the ZIP root, with the build's
+# version stamped in. Written through .NET because Set-Content -Encoding UTF8 on
+# Windows PowerShell 5.1 emits a BOM, which serde_json rejects.
+$launcherManifestPath = Join-Path $projectDir 'launcher-manifest.json'
+if (-not (Test-Path $launcherManifestPath)) {
+    throw "launcher-manifest.json not found at: $launcherManifestPath"
+}
+$launcherManifest = Get-Content $launcherManifestPath -Raw | ConvertFrom-Json
+$launcherManifest.mod_info.version = $version
+[System.IO.File]::WriteAllText(
+    (Join-Path $ghStaging 'launcher-manifest.json'),
+    ($launcherManifest | ConvertTo-Json -Depth 10),
+    (New-Object System.Text.UTF8Encoding $false))
+Write-Host "  launcher-manifest.json (v$version)" -ForegroundColor Green
+
 $pluginsDir = Join-Path $ghStaging 'plugins'
 New-Item -ItemType Directory -Path $pluginsDir -Force | Out-Null
 Copy-Item $asiPath -Destination $pluginsDir -Force
