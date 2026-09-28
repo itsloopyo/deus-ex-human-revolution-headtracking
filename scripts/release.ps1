@@ -52,22 +52,6 @@ if ($Version -eq 'nightly') {
 
 Import-Module (Join-Path $ProjectRoot 'cameraunlock-core/powershell/ReleaseWorkflow.psm1') -Force
 
-# Mirrors New-ChangelogFromCommits' insertion so a -Force maintenance entry
-# lands in the same place with the same shape.
-function Add-MaintenanceChangelogEntry {
-    param([string]$Path, [string]$NewVersion)
-    $date = Get-Date -Format 'yyyy-MM-dd'
-    $entry = "## [$NewVersion] - $date`n`n### Changed`n`n- Maintenance release (no user-facing changes).`n`n"
-    $changelog = Get-Content $Path -Raw
-    if ($changelog -match '(?s)(# Changelog.*?)(## \[)') {
-        $changelog = $changelog -replace '(?s)(# Changelog.*?\n\n)', "`$1$entry"
-    } else {
-        $changelog = $changelog -replace '(?s)(# Changelog.*?\n)', "`$1$entry"
-    }
-    $changelog = $changelog.TrimEnd() + "`n"
-    Set-Content $Path $changelog -NoNewline
-}
-
 function Write-NoBom {
     param([string]$Path, [string]$Text)
     [System.IO.File]::WriteAllText($Path, $Text, (New-Object System.Text.UTF8Encoding $false))
@@ -83,15 +67,17 @@ if ($cmakeText -notmatch 'project\(DeusExHumanRevolutionHeadTracking VERSION (\d
 $current = $Matches[1]
 
 if ($Version -in @('major', 'minor', 'patch')) {
-    $target = Get-NextVersion -Current $current -Bump $Version
+    $target = Step-SemanticVersion -Version $current -Bump $Version
 } else {
     $target = $Version
 }
 
-if (-not (Test-SemVer -Version $target)) {
+if (-not (Test-SemanticVersion -Version $target)) {
     Write-Error "Not a valid semver: $target"
     exit 1
 }
+
+Assert-ReleaseNotBelowCanonicalSince -RepoRoot $ProjectRoot -Version $target
 
 # --- 2. Preconditions (these stand in for interactive confirmation) ----
 $branch = (git -C $ProjectRoot rev-parse --abbrev-ref HEAD).Trim()
@@ -116,33 +102,19 @@ if (git -C $ProjectRoot tag --list $tag) {
 
 Write-Host "Releasing $current -> $target" -ForegroundColor Cyan
 
-# --- 3. Changelog from commits since the last tag ----------------------
+# --- 3. Changelog --------------------------------------------------------
 # This is the gate that aborts when there are no user-facing commits, so run
 # it BEFORE mutating any version files or building - a failure here then
 # leaves a clean tree instead of stranding a half-applied version bump with
 # no tag.
 $changelogPath = Join-Path $ProjectRoot 'CHANGELOG.md'
 Write-Host "Generating CHANGELOG..." -ForegroundColor Cyan
-$prevTag = Get-PreviousTag -ProjectRoot $ProjectRoot
-if (-not $prevTag) {
-    # First release - ensure a baseline CHANGELOG exists
-    if (-not (Test-Path $changelogPath)) {
-        $date = Get-Date -Format 'yyyy-MM-dd'
-        Write-NoBom -Path $changelogPath -Text "# Changelog`n`n## [$target] - $date`n`nFirst release.`n"
-    }
-} else {
-    try {
-        $entry = New-ChangelogFromCommits -Version $target -ProjectRoot $ProjectRoot -PreviousTag $prevTag
-        Update-ChangelogFile -ChangelogPath $changelogPath -NewEntry $entry
-    } catch {
-        if (-not $Force) {
-            Write-Error "$($_.Exception.Message)"
-            Write-Host "No user-facing changes to release. Re-run with -Force for a maintenance release." -ForegroundColor Yellow
-            exit 1
-        }
-        Write-Host "No user-facing commits since last tag - writing maintenance entry (-Force)." -ForegroundColor Yellow
-        Add-MaintenanceChangelogEntry -Path $changelogPath -NewVersion $target
-    }
+try {
+    New-ChangelogFromCommits -ChangelogPath $changelogPath -Version $target -Maintenance:$Force | Out-Null
+} catch {
+    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "No user-facing changes to release. Re-run with -Force for a maintenance release." -ForegroundColor Yellow
+    exit 1
 }
 
 # --- 4. Bump the canonical version (CMakeLists.txt) + keep pixi.toml in sync
